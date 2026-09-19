@@ -1,0 +1,68 @@
+:root {
+  /* Color system */
+  --background: #f7f8fa;
+  --surface: #ffffff;
+  --primary: #5b4bdb;
+  --primary-dark: #4435b5;
+  --secondary: #7c6ff2;
+  --text: #1f2430;
+  --text-secondary: #667085;
+  --border: #e6e8ec;
+  --success: #22a06b;
+  --warning: #f59e0b;
+  --danger: #e5484d;
+  --ai-accent: #8b5cf6;
+
+  /* Derived / utility colors */
+  --primary-contrast: #ffffff;
+  --surface-hover: #fafafb;
+  --overlay: rgba(31, 36, 48, 0.55);
+  --focus-ring: #4435b5;
+  --ai-accent-soft: rgba(139, 92, 246, 0.1);
+  --primary-soft: rgba(91, 75, 219, 0.08);
+  --success-soft: rgba(34, 160, 107, 0.1);
+  --warning-soft: rgba(245, 158, 11, 0.12);
+
+  /* Typography */
+  --font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-size-xs: 0.8125rem;
+  --font-size-sm: 0.9375rem;
+  --font-size-base: 1rem;
+  --font-size-md: 1.125rem;
+  --font-size-lg: 1.375rem;
+  --font-size-xl: 1.75rem;
+  --font-size-2xl: 2.25rem;
+  --font-size-3xl: 3rem;
+  --line-height-tight: 1.2;
+  --line-height-normal: 1.55;
+
+  /* Spacing scale */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+  --space-9: 6rem;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+
+  /* Shadow */
+  --shadow-sm: 0 1px 2px rgba(31, 36, 48, 0.06);
+  --shadow-md: 0 8px 24px rgba(31, 36, 48, 0.08);
+  --shadow-lg: 0 16px 48px rgba(31, 36, 48, 0.12);
+
+  /* Layout */
+  --container-max: 1180px;
+  --header-height: 76px;
+
+  /* Motion */
+  --transition-fast: 150ms ease;
+  --transition-base: 220ms ease;
+}
