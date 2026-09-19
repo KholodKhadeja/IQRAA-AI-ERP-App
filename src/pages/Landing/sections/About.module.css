@@ -1,0 +1,16 @@
+.section {
+  padding-block: var(--space-8);
+}
+
+.statement {
+  max-width: 62ch;
+  margin-inline: auto;
+  text-align: center;
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.statement span {
+  color: var(--primary);
+}

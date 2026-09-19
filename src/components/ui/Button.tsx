@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import type { ButtonHTMLAttributes, MouseEventHandler, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import styles from './Button.module.css'
 
@@ -19,6 +19,7 @@ type ButtonAsButton = CommonProps &
 type ButtonAsLink = CommonProps & {
   to: string
   href?: undefined
+  onClick?: MouseEventHandler<HTMLAnchorElement>
 }
 
 type ButtonProps = ButtonAsButton | ButtonAsLink
@@ -31,7 +32,7 @@ export function Button(props: ButtonProps) {
 
   if ('to' in props && props.to) {
     return (
-      <Link to={props.to} className={className}>
+      <Link to={props.to} className={className} onClick={props.onClick}>
         {icon}
         {children}
       </Link>

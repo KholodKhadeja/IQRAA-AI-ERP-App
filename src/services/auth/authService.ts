@@ -7,7 +7,11 @@ import { MockAuthProvider, type AuthProvider } from './authProvider'
  * when a real identity backend is connected.
  */
 class AuthService {
-  constructor(private readonly provider: AuthProvider) {}
+  private readonly provider: AuthProvider
+
+  constructor(provider: AuthProvider) {
+    this.provider = provider
+  }
 
   login(credentials: Credentials): Promise<AuthResult> {
     return this.provider.login(credentials)
