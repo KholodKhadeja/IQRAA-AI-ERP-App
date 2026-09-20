@@ -1,7 +1,10 @@
+import { useLanguage } from "../../i18n/LanguageContext";
+
 export function SkipLink() {
+  const { t } = useLanguage();
   return (
     <a href="#main-content" className="skip-link">
-      Skip to main content
+      {t.meta.skipLink}
     </a>
-  )
+  );
 }

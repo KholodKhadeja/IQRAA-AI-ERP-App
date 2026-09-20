@@ -1,31 +1,33 @@
-import { useCallback, useState } from 'react'
-import { authService } from '../services/auth/authService'
-import type { AuthUser, Credentials } from '../types/auth'
+import { useCallback, useState } from "react";
+import { authService } from "../services/auth/authService";
+import type { AuthUser, Credentials } from "../types/auth";
 
 export function useAuth() {
-  const [user, setUser] = useState<AuthUser | null>(() => authService.getSession()?.user ?? null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [user, setUser] = useState<AuthUser | null>(
+    () => authService.getSession()?.user ?? null,
+  );
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const login = useCallback(async (credentials: Credentials) => {
-    setIsLoading(true)
-    setError(null)
+    setIsLoading(true);
+    setError(null);
     try {
-      const result = await authService.login(credentials)
-      setUser(result.user)
-      return result.user
+      const result = await authService.login(credentials);
+      setUser(result.user);
+      return result.user;
     } catch {
-      setError('Unable to sign in. Please check your credentials and try again.')
-      return null
+      setError("לא ניתן להתחבר כרגע. בדקו את הפרטים ונסו שוב.");
+      return null;
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [])
+  }, []);
 
   const logout = useCallback(async () => {
-    await authService.logout()
-    setUser(null)
-  }, [])
+    await authService.logout();
+    setUser(null);
+  }, []);
 
-  return { user, isLoading, error, login, logout }
+  return { user, isLoading, error, login, logout };
 }

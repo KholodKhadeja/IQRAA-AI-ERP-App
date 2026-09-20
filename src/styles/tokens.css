@@ -1,30 +1,31 @@
 :root {
   /* Color system */
-  --background: #f7f8fa;
+  --background: #f8f7fb;
   --surface: #ffffff;
-  --primary: #5b4bdb;
-  --primary-dark: #4435b5;
-  --secondary: #7c6ff2;
-  --text: #1f2430;
-  --text-secondary: #667085;
-  --border: #e6e8ec;
-  --success: #22a06b;
-  --warning: #f59e0b;
-  --danger: #e5484d;
-  --ai-accent: #8b5cf6;
+  --primary: #6c5ce7;
+  --primary-dark: #5142b8;
+  --secondary: #8172ee;
+  --primary-pale: #f1efff;
+  --text: #201d2b;
+  --text-secondary: #666276;
+  --border: #e7e3ef;
+  --success: #5142b8;
+  --warning: #8172ee;
+  --danger: #b43d68;
+  --ai-accent: #8172ee;
 
   /* Derived / utility colors */
   --primary-contrast: #ffffff;
-  --surface-hover: #fafafb;
-  --overlay: rgba(31, 36, 48, 0.55);
-  --focus-ring: #4435b5;
-  --ai-accent-soft: rgba(139, 92, 246, 0.1);
-  --primary-soft: rgba(91, 75, 219, 0.08);
-  --success-soft: rgba(34, 160, 107, 0.1);
-  --warning-soft: rgba(245, 158, 11, 0.12);
+  --surface-hover: #f1efff;
+  --overlay: rgba(32, 29, 43, 0.55);
+  --focus-ring: #5142b8;
+  --ai-accent-soft: rgba(129, 114, 238, 0.14);
+  --primary-soft: rgba(108, 92, 231, 0.1);
+  --success-soft: rgba(81, 66, 184, 0.1);
+  --warning-soft: rgba(129, 114, 238, 0.12);
 
   /* Typography */
-  --font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-family: "Assistant", "Arial", sans-serif;
   --font-size-xs: 0.8125rem;
   --font-size-sm: 0.9375rem;
   --font-size-base: 1rem;
@@ -48,9 +49,9 @@
   --space-9: 6rem;
 
   /* Radius */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
+  --radius-sm: 12px;
+  --radius-md: 18px;
+  --radius-lg: 24px;
   --radius-full: 999px;
 
   /* Shadow */

@@ -52,6 +52,7 @@
   font-size: var(--font-size-sm);
   text-decoration: none;
   color: var(--text);
+  transition: color var(--transition-fast);
 }
 
 .linkList a:hover {

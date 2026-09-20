@@ -1,46 +1,42 @@
-import styles from './Footer.module.css'
+import { Link } from "react-router-dom";
+import { useLanguage } from "../../i18n/LanguageContext";
+import styles from "./Footer.module.css";
 
 export function Footer() {
+  const { t } = useLanguage();
+
   return (
     <footer className={styles.footer}>
       <div className={`container ${styles.inner}`}>
         <div className={styles.brandBlock}>
-          <span className={styles.brand}>AI Learning Operations ERP</span>
-          <p className={styles.description}>
-            From Lead to Published Learning Product — connected, automated and AI-powered with n8n.
-          </p>
+          <span className={styles.brand}>IQRAA Digital Learning</span>
+          <p className={styles.description}>{t.footer.description}</p>
         </div>
 
         <div className={styles.columns}>
-          <nav aria-label="Footer navigation">
-            <h2 className={styles.columnTitle}>Navigation</h2>
+          <nav aria-label={t.footer.navTitle}>
+            <h2 className={styles.columnTitle}>{t.footer.navTitle}</h2>
             <ul className={styles.linkList}>
               <li>
-                <a href="#solutions">Solutions</a>
+                <Link to="/#services">{t.footer.services}</Link>
               </li>
               <li>
-                <a href="#products">Products</a>
-              </li>
-              <li>
-                <a href="#ai">How It Works</a>
-              </li>
-              <li>
-                <a href="#about">About</a>
+                <Link to="/#process">{t.footer.process}</Link>
               </li>
             </ul>
           </nav>
 
-          <nav aria-label="Legal and contact">
-            <h2 className={styles.columnTitle}>Contact</h2>
+          <nav aria-label={t.footer.contactTitle}>
+            <h2 className={styles.columnTitle}>{t.footer.contactTitle}</h2>
             <ul className={styles.linkList}>
               <li>
-                <a href="#contact">Talk to our team</a>
+                <Link to="/#contact">{t.footer.talkToUs}</Link>
               </li>
               <li>
-                <a href="#accessibility">Accessibility</a>
+                <Link to="/accessibility">{t.footer.accessibility}</Link>
               </li>
               <li>
-                <a href="#privacy">Privacy</a>
+                <Link to="/#contact">{t.footer.privacy}</Link>
               </li>
             </ul>
           </nav>
@@ -49,10 +45,13 @@ export function Footer() {
 
       <div className="container">
         <div className={styles.bottom}>
-          <span>© {new Date().getFullYear()} AI Learning Operations ERP. All rights reserved.</span>
-          <span>Built for digital learning production.</span>
+          <span>
+            © {new Date().getFullYear()} IQRAA Digital Learning LTD.{" "}
+            {t.footer.rights}
+          </span>
+          <span>{t.footer.poweredBy}</span>
         </div>
       </div>
     </footer>
-  )
+  );
 }

@@ -1,0 +1,562 @@
+.hero {
+  overflow: hidden;
+  padding: 4.75rem 0 5.5rem;
+  background: var(--background);
+}
+
+.heroGrid {
+  display: grid;
+  gap: 3.5rem;
+  align-items: center;
+}
+
+.heroCopy {
+  max-width: 700px;
+}
+
+.kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0 0 1.25rem;
+  color: var(--primary-dark);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.hero h1,
+.sectionIntro h2,
+.workflowIntro h2,
+.erpGrid h2,
+.contactCopy h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(3.1rem, 7vw, 6.6rem);
+  font-weight: 800;
+  letter-spacing: -0.07em;
+  line-height: 0.94;
+}
+
+html[lang="ar"] .hero h1,
+html[lang="ar"] .sectionIntro h2,
+html[lang="ar"] .workflowIntro h2,
+html[lang="ar"] .erpGrid h2,
+html[lang="ar"] .contactCopy h2 {
+  letter-spacing: normal;
+  line-height: 1.35;
+}
+
+html[lang="he"] .hero h1,
+html[lang="he"] .sectionIntro h2,
+html[lang="he"] .workflowIntro h2,
+html[lang="he"] .erpGrid h2,
+html[lang="he"] .contactCopy h2 {
+  font-weight: 700;
+}
+
+.hero h1 em,
+.sectionIntro h2 em,
+.workflowIntro h2 em,
+.erpGrid h2 em,
+.contactCopy h2 em {
+  color: var(--primary);
+  font-style: normal;
+}
+
+.heroCopy > p {
+  max-width: 510px;
+  margin: 2rem 0 0;
+  color: #667085;
+  font-size: 1.2rem;
+  line-height: 1.7;
+}
+
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.9rem;
+  margin-top: 2.15rem;
+}
+
+.heroHighlights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.6rem;
+  margin: 2.2rem 0 0;
+}
+.heroHighlights li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+.heroHighlights svg {
+  flex-shrink: 0;
+  color: var(--primary);
+}
+
+.mockupDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+.heroVisual {
+  position: relative;
+  min-height: 430px;
+}
+
+.heroVisual::before {
+  position: absolute;
+  top: -24px;
+  right: -24px;
+  width: 140px;
+  height: 140px;
+  background: var(--primary-pale);
+  content: "";
+}
+
+.heroVisual img {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 460px;
+  object-fit: cover;
+  object-position: center;
+  filter: saturate(0.82);
+  border-radius: var(--radius-lg);
+}
+
+.heroCaption {
+  position: absolute;
+  z-index: 2;
+  right: -18px;
+  bottom: 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 205px;
+  padding: 1.25rem 1.4rem;
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  box-shadow: 12px 12px 0 var(--primary-soft);
+}
+
+.heroCaption span {
+  color: #667085;
+  font-size: 0.8rem;
+}
+.heroCaption strong {
+  color: #1f2430;
+  font-size: 1.4rem;
+}
+.heroStamp {
+  position: absolute;
+  z-index: 2;
+  left: 1.25rem;
+  bottom: 1.25rem;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.productsSection,
+.contactSection {
+  padding-block: 8rem;
+}
+.sectionNumber {
+  display: inline-block;
+  margin-bottom: 1.2rem;
+  color: var(--primary-dark);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.sectionIntro {
+  margin-bottom: 4rem;
+}
+.sectionIntro > p:not(.kicker) {
+  max-width: 480px;
+  margin: 1.5rem 0 0;
+  color: #667085;
+  line-height: 1.7;
+}
+.sectionIntro h2,
+.workflowIntro h2,
+.erpGrid h2,
+.contactCopy h2 {
+  font-size: clamp(2.8rem, 5vw, 5.3rem);
+}
+
+.productsMosaic {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 250px);
+  gap: 1.1rem;
+}
+.productTile {
+  position: relative;
+  width: 250px;
+  height: 250px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background-size: cover;
+  background-position: center;
+  text-align: center;
+  transition: transform var(--transition-fast);
+}
+.productTile:hover {
+  transform: translateY(-3px);
+}
+.productTileOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+}
+.productTileBadge {
+  position: absolute;
+  z-index: 1;
+  top: 0.7rem;
+  right: 0.7rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.55rem;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: var(--radius-full);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(2px);
+}
+.productTile h3 {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  color: #fff;
+  font-size: 1.15rem;
+  font-weight: 800;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.9),
+    0 2px 12px rgba(0, 0, 0, 0.55);
+}
+.workflowSection {
+  padding-block: 7rem;
+  background: var(--primary-pale);
+}
+.workflowLayout {
+  display: grid;
+  grid-template-columns: 0.8fr 1.2fr;
+  gap: 7rem;
+}
+.workflowIntro > p:last-child {
+  max-width: 310px;
+  margin: 2rem 0 0;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+.timeline {
+  margin: 0;
+  padding: 0.5rem 0 0;
+  list-style: none;
+}
+.timeline li {
+  display: grid;
+  grid-template-columns: 42px 28px 1fr;
+  min-height: 100px;
+  gap: 1rem;
+}
+.timelineNumber {
+  padding-top: 0.1rem;
+  color: var(--primary-dark);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+.timelineLine {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+.timelineLine::before {
+  position: absolute;
+  top: 5px;
+  width: 12px;
+  height: 12px;
+  border: 3px solid #00c875;
+  border-radius: 50%;
+  background: #eaf7f1;
+  content: "";
+}
+.timelineLine span {
+  width: 1px;
+  height: 100%;
+  background: #8eddb9;
+}
+.timeline h3 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+.timeline p {
+  max-width: 390px;
+  margin: 0.45rem 0 0;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.erpSection {
+  padding-block: 7rem;
+  background: var(--primary-pale);
+}
+.erpGrid {
+  display: grid;
+  grid-template-columns: 0.8fr 1.2fr;
+  gap: 6rem;
+  align-items: center;
+}
+.erpGrid > div:first-child > p:not(.kicker) {
+  max-width: 390px;
+  margin: 1.7rem 0 2rem;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+.erpMockup {
+  padding: 1rem;
+  background: var(--primary-dark);
+  border-radius: var(--radius-lg);
+  box-shadow: 18px 18px 0 var(--primary-soft);
+  transform: rotate(2deg);
+}
+.mockupTop {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.7rem 0.8rem 1rem;
+  color: #fff;
+  font-size: 0.8rem;
+}
+.mockupDot {
+  display: block;
+  background: var(--secondary);
+}
+.mockupBody {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  min-height: 300px;
+  background: var(--background);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.mockupSidebar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding-top: 1rem;
+  background: var(--primary);
+}
+.mockupSidebar span {
+  width: 19px;
+  height: 6px;
+  background: #c7bfff;
+}
+.mockupSidebar span:first-child {
+  background: #fff;
+}
+.mockupContent {
+  padding: 1.5rem;
+}
+.mockupHeading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.mockupHeading i {
+  width: 56px;
+  height: 18px;
+  background: var(--secondary);
+}
+.mockupColumns {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.7rem;
+  margin-top: 2rem;
+}
+.mockupColumns span {
+  height: 70px;
+  background: #e7e3ef;
+  border-radius: var(--radius-sm);
+}
+.mockupColumns span:first-child {
+  background: var(--primary-soft);
+}
+.mockupRows {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 1rem;
+}
+.mockupRows span {
+  height: 15px;
+  background: #e7e3ef;
+  border-radius: var(--radius-sm);
+}
+.mockupRows span:nth-child(2) {
+  width: 76%;
+}
+.mockupRows span:nth-child(4) {
+  width: 88%;
+}
+
+.contactSection {
+  display: grid;
+  grid-template-columns: 0.8fr 1.2fr;
+  gap: 6rem;
+  padding-bottom: 8rem;
+}
+.contactCopy > p:not(.kicker) {
+  margin: 1.7rem 0 2rem;
+  color: #667085;
+  font-size: 1.1rem;
+}
+.contactDetails {
+  display: grid;
+  gap: 0.75rem;
+}
+.contactDetails a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: fit-content;
+  color: #1f2430;
+  text-decoration: none;
+}
+.contactForm {
+  padding: 2rem;
+  background: #f7f8fa;
+  border-top: 4px solid #6161ff;
+}
+.formRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+.contactForm :global(input),
+.contactForm textarea {
+  border-color: #d9dce3;
+  background: #fff;
+}
+.textareaLabel {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 1rem;
+  color: #1f2430;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+.contactForm textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 0.8rem;
+  font: inherit;
+  border: 1px solid #d9dce3;
+}
+.submitButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1.2rem;
+  padding: 0.9rem 1.25rem;
+  color: #fff;
+  background: #6161ff;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+.submitButton:hover {
+  background: #4848d8;
+}
+.successMessage {
+  min-height: 270px;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 0.8rem;
+  color: #00a864;
+}
+.successMessage h3 {
+  margin: 0;
+  color: #1f2430;
+  font-size: 1.6rem;
+}
+.successMessage p {
+  margin: 0;
+  color: #667085;
+}
+
+@media (min-width: 900px) {
+  .heroGrid {
+    grid-template-columns: 1.1fr 0.9fr;
+  }
+  .heroCopy {
+    padding-inline-start: 2rem;
+  }
+}
+@media (max-width: 899px) {
+  .workflowLayout,
+  .erpGrid,
+  .contactSection {
+    grid-template-columns: 1fr;
+    gap: 3rem;
+  }
+  .sectionIntro > p:not(.kicker) {
+    max-width: 500px;
+  }
+}
+@media (max-width: 600px) {
+  .hero {
+    padding-top: 3rem;
+  }
+  .heroVisual {
+    min-height: 310px;
+  }
+  .heroVisual img {
+    height: 350px;
+  }
+  .heroCaption {
+    right: 12px;
+    bottom: 20px;
+  }
+  .hero h1 {
+    font-size: clamp(3rem, 15vw, 4.7rem);
+  }
+  .productsSection,
+  .contactSection {
+    padding-block: 5rem;
+  }
+  .workflowSection,
+  .erpSection {
+    padding-block: 5rem;
+  }
+  .formRow {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .contactForm {
+    padding: 1.2rem;
+  }
+  .erpMockup {
+    transform: none;
+  }
+}

@@ -1,0 +1,70 @@
+.page {
+  max-width: 760px;
+  padding-block: 4rem 6rem;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: 2rem;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.backLink:hover {
+  color: var(--text);
+}
+
+.title {
+  margin: 0 0 0.5rem;
+  color: var(--text);
+  font-size: clamp(2.2rem, 5vw, 3rem);
+  font-weight: 800;
+}
+
+.updated {
+  margin: 0 0 2.5rem;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.intro {
+  margin: 0 0 2.5rem;
+  color: var(--text);
+  font-size: var(--font-size-md);
+  line-height: 1.8;
+}
+
+.block {
+  padding-block: 1.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.block h2 {
+  margin: 0 0 0.75rem;
+  color: var(--text);
+  font-size: var(--font-size-xl);
+}
+
+.block p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+
+.contactLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: 1rem;
+  color: var(--primary-dark);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.contactLink:hover {
+  text-decoration: underline;
+}

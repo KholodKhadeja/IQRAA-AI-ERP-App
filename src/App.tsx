@@ -1,19 +1,19 @@
-import { Footer } from './components/layout/Footer'
-import { Header } from './components/layout/Header'
-import { Hero } from './pages/Landing/sections/Hero'
-import { PlatformOverview } from './pages/Landing/sections/PlatformOverview'
+import { AccessibilityWidget } from "./components/accessibility/AccessibilityWidget";
+import { SkipLink } from "./components/accessibility/SkipLink";
+import { useScrollToHash } from "./hooks/useScrollToHash";
+import { LanguageProvider } from "./i18n/LanguageContext";
+import { AppRoutes } from "./routes/AppRoutes";
 
 function App() {
-    return (
-      <>
-        <Header />
-        <main>
-          <Hero />
-          <PlatformOverview />
-        </main>
-        <Footer />
-      </>
-    )
+  useScrollToHash();
+
+  return (
+    <LanguageProvider>
+      <SkipLink />
+      <AppRoutes />
+      <AccessibilityWidget />
+    </LanguageProvider>
+  );
 }
 
-export default App
+export default App;

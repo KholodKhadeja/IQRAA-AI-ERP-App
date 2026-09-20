@@ -1,20 +1,21 @@
-import { useState } from 'react'
-import { Menu, Sparkles } from 'lucide-react'
-import { Link } from 'react-router-dom'
-import { Button } from '../ui/Button'
-import { MobileMenu, type NavItem } from '../navigation/MobileMenu'
-import styles from './Header.module.css'
-
-const NAV_ITEMS: NavItem[] = [
-  { label: 'Solutions', href: '#solutions' },
-  { label: 'Products', href: '#products' },
-  { label: 'How It Works', href: '#ai' },
-  { label: 'About', href: '#about' },
-  { label: 'Contact', href: '#contact' },
-]
+import { useState } from "react";
+import { Menu, Sparkles, X } from "lucide-react";
+import { Link } from "react-router-dom";
+import { useLanguage } from "../../i18n/LanguageContext";
+import { Button } from "../ui/Button";
+import { LanguageToggle } from "../ui/LanguageToggle";
+import { MobileMenu } from "../navigation/MobileMenu";
+import styles from "./Header.module.css";
 
 export function Header() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { t } = useLanguage();
+
+  const navItems = [
+    { label: t.header.nav.services, href: "/#services" },
+    { label: t.header.nav.process, href: "/#process" },
+    { label: t.header.nav.contact, href: "/#contact" },
+  ];
 
   return (
     <header className={styles.header}>
@@ -23,45 +24,59 @@ export function Header() {
           <span className={styles.brandMark} aria-hidden="true">
             <Sparkles size={18} />
           </span>
-          AI Learning Operations ERP
+          <span className={styles.brandNames}>
+            <span className={styles.brandCompany}>IQRAA Digital Learning</span>
+            <span className={styles.brandProduct}>
+              AI Learning Operations ERP
+            </span>
+          </span>
         </Link>
 
         <nav className={styles.nav} aria-label="Primary">
           <ul className={styles.navList}>
-            {NAV_ITEMS.map((item) => (
+            {navItems.map((item) => (
               <li key={item.href}>
-                <a href={item.href} className={styles.navLink}>
+                <Link to={item.href} className={styles.navLink}>
                   {item.label}
-                </a>
+                </Link>
               </li>
             ))}
           </ul>
         </nav>
 
         <div className={styles.actions}>
-          <Button to="/login" variant="ghost">
-            Login
+          <LanguageToggle />
+          <Button to="/login" variant="secondary">
+            {t.header.login}
           </Button>
           <Button to="/login" variant="primary">
-            Talk to us
+            {t.header.talkToUs}
           </Button>
         </div>
 
         <button
           type="button"
           className={styles.menuButton}
-          aria-label="Open menu"
+          aria-label={isMenuOpen ? t.header.closeMenu : t.header.openMenu}
           aria-expanded={isMenuOpen}
           aria-controls="mobile-menu"
-          onClick={() => setIsMenuOpen(true)}
+          onClick={() => setIsMenuOpen((isOpen) => !isOpen)}
         >
-          <Menu size={22} aria-hidden="true" />
+          {isMenuOpen ? (
+            <X size={22} aria-hidden="true" />
+          ) : (
+            <Menu size={22} aria-hidden="true" />
+          )}
         </button>
       </div>
 
       <div id="mobile-menu">
-        <MobileMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} navItems={NAV_ITEMS} />
+        <MobileMenu
+          isOpen={isMenuOpen}
+          onClose={() => setIsMenuOpen(false)}
+          navItems={navItems}
+        />
       </div>
     </header>
-  )
+  );
 }
