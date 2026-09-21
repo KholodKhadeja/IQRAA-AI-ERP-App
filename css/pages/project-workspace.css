@@ -1,0 +1,110 @@
+/* Project Workspace — screens.md §10 / CLAUDE.md §9 "screens.md §38 Step 3". */
+.workspace-main--project-workspace {
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+.project-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  width: 100%;
+  max-width: var(--container-max);
+  margin-inline: auto;
+}
+
+.project-workspace__back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: start;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  transition: color var(--transition-fast);
+}
+
+.project-workspace__back:hover {
+  color: var(--primary-dark);
+}
+
+.project-workspace__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-5);
+}
+
+/* Individual header facts use the shared .field-row (css/components/
+   data-display.css) instead of a page-scoped duplicate. */
+
+.project-workspace__header-progress {
+  min-width: 140px;
+}
+
+.project-workspace__grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+@media (min-width: 960px) {
+  .project-workspace__grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    align-items: start;
+  }
+}
+
+.project-workspace__summary {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.project-workspace__main,
+.project-workspace__side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+/* Small muted note paragraphs use the shared .note-text (css/components/
+   data-display.css) instead of a page-scoped duplicate — reused well
+   beyond this page (Client Project View, Settings, Team Management). */
+
+.project-workspace__team-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.project-workspace__team-member {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.project-workspace__team-member-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.project-workspace__team-member-name {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
+.project-workspace__team-member-role {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+/* Resource rows and the client-modal related-projects list both use the
+   shared .list-row/.list-row__icon/.list-row__title (css/components/
+   data-display.css) instead of page-scoped classes here — clients.html
+   doesn't load this stylesheet, so anything reused across pages has to
+   live in the shared file, not here. */

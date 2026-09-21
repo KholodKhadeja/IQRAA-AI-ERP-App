@@ -1,0 +1,36 @@
+/* Shared internal-Workspace shell layout: right-side sidebar column +
+   header + main content. Every future Workspace screen (pages/*.html)
+   composes into this same wrapper — see CLAUDE.md §9/§18. Sidebar
+   placement is right-side purely from DOM order (#sidebar-root is the
+   first child) plus the fixed dir="rtl" on <html>; no explicit
+   order/flex-direction trick needed below the desktop breakpoint, since
+   the sidebar renders as a fixed-position overlay there and contributes
+   no layout space (see css/components/sidebar.css). */
+
+.workspace-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--background);
+}
+
+.workspace-shell__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.workspace-main {
+  flex: 1;
+  padding: var(--space-6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (min-width: 960px) {
+  .workspace-shell {
+    flex-direction: row;
+  }
+}

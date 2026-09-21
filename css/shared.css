@@ -1,0 +1,15 @@
+/* Loaded on every page: tokens + global resets/a11y rules, then every
+   shared component's stylesheet. Page-specific CSS is linked separately,
+   after this file, so its rules can extend these building blocks. */
+@import "./global.css";
+@import "./components/button.css";
+@import "./components/text-field.css";
+@import "./components/language-toggle.css";
+@import "./components/mobile-menu.css";
+@import "./components/accessibility-widget.css";
+@import "./components/header.css";
+@import "./components/footer.css";
+@import "./components/sidebar.css";
+@import "./components/workspace-header.css";
+@import "./components/data-display.css";
+@import "./components/modal.css";

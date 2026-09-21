@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="../src/images/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <title>IQRAA Digital Learning | AI Learning Operations ERP</title>
+    <link rel="stylesheet" href="../css/shared.css" />
+    <link rel="stylesheet" href="../css/pages/accessibility-page.css" />
+  </head>
+  <body>
+    <div id="header-root"></div>
+    <a href="#main-content" class="skip-link" data-i18n="meta.skipLink"></a>
+
+    <main id="main-content">
+      <section class="container a11y-page">
+        <a href="../index.html" class="a11y-page__back-link" id="a11y-page-back-link">
+          <span data-i18n="accessibilityPage.backLink"></span>
+        </a>
+
+        <h1 class="a11y-page__title" data-i18n="accessibilityPage.title"></h1>
+        <p class="a11y-page__updated">
+          <span data-i18n="accessibilityPage.updatedLabel"></span> 20.09.2026
+        </p>
+
+        <p class="a11y-page__intro" data-i18n="accessibilityPage.intro"></p>
+
+        <article class="a11y-page__block">
+          <h2 data-i18n="accessibilityPage.standardHeading"></h2>
+          <p data-i18n="accessibilityPage.standardBody"></p>
+        </article>
+
+        <article class="a11y-page__block">
+          <h2 data-i18n="accessibilityPage.featuresHeading"></h2>
+          <p data-i18n="accessibilityPage.featuresBody"></p>
+        </article>
+
+        <article class="a11y-page__block">
+          <h2 data-i18n="accessibilityPage.limitationsHeading"></h2>
+          <p data-i18n="accessibilityPage.limitationsBody"></p>
+        </article>
+
+        <article class="a11y-page__block">
+          <h2 data-i18n="accessibilityPage.contactHeading"></h2>
+          <p data-i18n="accessibilityPage.contactBody"></p>
+          <a href="mailto:accessibility@iqraa-learning.com" class="a11y-page__contact-link" id="a11y-page-contact-link">
+            <span data-i18n="accessibilityPage.contactEmailLabel"></span>: accessibility@iqraa-learning.com
+          </a>
+        </article>
+
+        <article class="a11y-page__block">
+          <h2 data-i18n="accessibilityPage.complaintHeading"></h2>
+          <p data-i18n="accessibilityPage.complaintBody"></p>
+        </article>
+      </section>
+    </main>
+
+    <div id="footer-root"></div>
+    <div id="a11y-widget-root"></div>
+
+    <script>window.IQRAA_PATHS = { root: "../", pages: "" };</script>
+    <script src="../js/i18n/translations.js"></script>
+    <script src="../js/i18n/i18n.js"></script>
+    <script src="../js/vendor/icons.js"></script>
+    <script src="../js/components/text-field.js"></script>
+    <script src="../js/components/language-toggle.js"></script>
+    <script src="../js/components/mobile-menu.js"></script>
+    <script src="../js/components/header.js"></script>
+    <script src="../js/components/footer.js"></script>
+    <script src="../js/components/accessibility-widget.js"></script>
+    <script src="../js/chrome.js"></script>
+    <script>
+      (function () {
+        var ns = window.IQRAA;
+        document.getElementById("a11y-page-back-link").innerHTML =
+          ns.icons.arrowLeft(16) + document.getElementById("a11y-page-back-link").innerHTML;
+        document.getElementById("a11y-page-contact-link").innerHTML =
+          ns.icons.mail(16) + document.getElementById("a11y-page-contact-link").innerHTML;
+        ns.i18n.translatePage();
+      })();
+    </script>
+  </body>
+</html>

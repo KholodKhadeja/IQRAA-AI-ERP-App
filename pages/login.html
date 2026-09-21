@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="../src/images/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <title>IQRAA Digital Learning | AI Learning Operations ERP</title>
+    <link rel="stylesheet" href="../css/shared.css" />
+    <link rel="stylesheet" href="../css/pages/login.css" />
+  </head>
+  <body>
+    <a href="#main-content" class="skip-link" data-i18n="meta.skipLink"></a>
+
+    <div class="login-page">
+      <aside
+        class="login-brand-pane"
+        style="background-image:url('https://images.unsplash.com/photo-1654533569144-f15fde124fb2?auto=format&amp;fit=crop&amp;w=1600&amp;q=80')"
+      >
+        <div class="login-brand-pane__scrim" aria-hidden="true"></div>
+        <div class="login-brand-pane__content">
+          <a href="../index.html" class="login-brand-link" id="login-brand-link">
+            <span class="login-brand-link-names">
+              <span class="login-brand-link-company">IQRAA Digital Learning</span>
+              <span class="login-brand-link-product">AI Learning Operations ERP</span>
+            </span>
+          </a>
+
+          <div class="login-brand-content">
+            <h2 class="login-brand-heading">
+              <span data-i18n="login.brandHeadingLine1"></span><br />
+              <span data-i18n="login.brandHeadingLine2"></span>
+            </h2>
+            <p class="login-brand-text" data-i18n="login.brandParagraph"></p>
+            <div class="login-flow" id="login-flow-steps"></div>
+          </div>
+
+          <span class="login-brand-footer" id="login-brand-footer"></span>
+        </div>
+      </aside>
+
+      <main id="main-content" class="login-form-pane">
+        <div class="login-form-card">
+          <a href="../index.html" class="login-back-link" id="login-back-link">
+            <span data-i18n="login.backLink"></span>
+          </a>
+
+          <div>
+            <h1 class="login-heading" data-i18n="login.heading"></h1>
+            <p class="login-subheading" data-i18n="login.subheading"></p>
+          </div>
+
+          <form class="login-form" id="login-form" novalidate>
+            <div class="login-form-error" role="alert" id="login-auth-error" hidden>
+              <span id="login-auth-error-icon"></span>
+              <span data-i18n="login.authError"></span>
+            </div>
+
+            <div class="login-form-success" role="status" id="login-success" hidden data-i18n="login.successMessage"></div>
+
+            <div class="text-field">
+              <label for="login-email" class="text-field__label" data-i18n="login.emailLabel"></label>
+              <div class="text-field__input-wrap">
+                <input id="login-email" name="email" type="email" class="text-field__input" autocomplete="email" required />
+              </div>
+              <span id="login-email-error" class="text-field__error" role="alert" hidden></span>
+            </div>
+
+            <div class="text-field">
+              <label for="login-password" class="text-field__label" data-i18n="login.passwordLabel"></label>
+              <div class="text-field__input-wrap">
+                <input id="login-password" name="password" type="password" class="text-field__input" autocomplete="current-password" required />
+                <button type="button" class="text-field__toggle" id="login-password-toggle" aria-pressed="false"></button>
+              </div>
+            </div>
+
+            <div class="login-form-footer">
+              <button type="button" class="login-forgot-link" data-i18n="login.forgotPassword"></button>
+            </div>
+
+            <button type="submit" class="btn btn--primary btn--full-width" id="login-submit">
+              <span data-i18n="login.submit"></span>
+            </button>
+          </form>
+        </div>
+      </main>
+    </div>
+
+    <div id="a11y-widget-root"></div>
+
+    <script>window.IQRAA_PATHS = { root: "../", pages: "" };</script>
+    <script src="../js/i18n/translations.js"></script>
+    <script src="../js/i18n/i18n.js"></script>
+    <script src="../js/vendor/icons.js"></script>
+    <script src="../js/components/text-field.js"></script>
+    <script src="../js/components/language-toggle.js"></script>
+    <script src="../js/components/mobile-menu.js"></script>
+    <script src="../js/components/header.js"></script>
+    <script src="../js/components/footer.js"></script>
+    <script src="../js/components/accessibility-widget.js"></script>
+    <script src="../js/services/auth.js"></script>
+    <script src="../js/chrome.js"></script>
+    <script src="../js/pages/login.js"></script>
+    <script>
+      (function () {
+        var ns = window.IQRAA;
+        document.getElementById("login-brand-link").innerHTML =
+          ns.icons.sparkles(20) + document.getElementById("login-brand-link").innerHTML;
+        document.getElementById("login-back-link").innerHTML =
+          ns.icons.arrowLeft(16) + document.getElementById("login-back-link").innerHTML;
+        document.getElementById("login-auth-error-icon").innerHTML = ns.icons.alertCircle(16);
+        document.getElementById("login-password-toggle").innerHTML = ns.icons.eye(18);
+
+        var flowStepsHost = document.getElementById("login-flow-steps");
+        var steps = ns.i18n.t("login.flowSteps") || [];
+        function renderFlowSteps() {
+          steps = ns.i18n.t("login.flowSteps") || [];
+          flowStepsHost.innerHTML = steps
+            .map(function (step) {
+              return '<span class="login-flow-step">' + step + "</span>";
+            })
+            .join("");
+        }
+        renderFlowSteps();
+        ns.i18n.onLanguageChange(renderFlowSteps);
+
+        document.getElementById("login-brand-footer").textContent =
+          "© " + new Date().getFullYear() + " IQRAA Digital Learning LTD";
+
+        ns.i18n.translatePage();
+      })();
+    </script>
+  </body>
+</html>

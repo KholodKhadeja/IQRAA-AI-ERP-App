@@ -1,6 +1,6 @@
 # AI Learning Operations ERP — Web App: Screen-Building Guide
 
-This file is the standing reference for building every screen in this project. Read it before starting new screens, and update it when a new pattern is established or an old one changes. It captures what was decided while building the Landing page and Login page, plus the project scope from the spec documents in the parent folder.
+This file is the standing reference for building every screen in this project. Read it before starting new screens, and update it when a new pattern is established or an old one changes. It captures what was decided while building the Landing page and Login page, the project scope from the spec documents in the parent folder, and a **2026-09-21 product-direction update** (§1–§10) that narrows and clarifies what IQRAA actually is — read that before continuing any work planned under the old, broader assumptions.
 
 ## 0. What this project actually is (read this first)
 
@@ -8,44 +8,223 @@ The project's own planning documents (`../AI_Learning_Operations_ERP_אפיון.
 
 > "המערכת תיבנה ללא Base44/Lovable. במקום זאת, Claude Code ישמש ככלי לבניית ממשק/יישום המערכת... Airtable ישמש כמקור האמת ו-n8n כשכבת האוטומציה והאינטגרציה."
 
-So: **this React/TypeScript app, built via Claude Code, *is* the "Lovable/Base44 app" the other docs refer to.** Ignore any Base44/Lovable-specific instructions in those docs (prompts, "no-code" framing, their screen lists) — the actual required screens for *this* project are in the אפיון doc (§15–16) and the checklist doc, not the generic Base44/Lovable template. Airtable is the system of record and n8n is the automation layer; this app is the interface layer only and should never hold API keys/credentials — sensitive/write operations go through n8n webhooks.
+So: **this hand-authored HTML/CSS/JS app, built via Claude Code, *is* the "Lovable/Base44 app" the other docs refer to.** Ignore any Base44/Lovable-specific instructions in those docs (prompts, "no-code" framing, their screen lists) — the actual required screens for *this* project are in the אפיון doc (§15–16) and the checklist doc, filtered through the product-direction update in §1–§2 below (that update takes precedence wherever it narrows or contradicts the original spec docs, e.g. dropping Google Calendar). Airtable is the system of record; the frontend (`index.html`/`pages/`) is the interface layer only and never holds API keys/credentials. Sensitive/write operations go through either n8n webhooks **or**, as of 2026-09-21g, a small dedicated `backend/` service for user management specifically (see §19b) — the frontend never talks to Airtable directly either way.
 
-## 1. Project roadmap (source: `../AI_Learning_Operations_ERP_Development_Checklist(1).docx`)
+**Tech stack note (2026-09-21):** this project was originally built in React + TypeScript + Vite (Phase 1: Landing + Login). It was then deliberately converted to hand-authored, build-step-free HTML/CSS/JS for a hosting/deploy constraint — the React version is gone, not archived. See §18 for the current stack and its conventions; every screen from here on follows that pattern, not the old React one.
 
-Current phase: **Phase 1 — Web App Foundation.** Landing + Login are built; responsiveness and accessibility passes have been done.
+## 1. Product vision — what IQRAA is (and isn't)
 
-Build order (don't jump ahead of this without being asked):
-1. **Phase 1 — Foundation**: Landing/Welcome, Responsive, Accessibility, Login, Google OAuth, role detection, role-based redirect.
-2. **Phase 2 — Navigation + Layout**: Sidebar, Header (app shell, not the marketing header), User Profile, Notifications, Breadcrumbs, responsive layout, role-based navigation.
-3. **Phase 3 — Admin Dashboard**: KPI cards, Leads, Active Projects, Projects by Stage, Pending Approvals, Payments, Recent Activity — start with mock data.
-4. **Phase 4 — CRM/Sales**: Leads list/details/create/edit, Lead status & qualification, pipeline view.
-5. **Phase 5 — Customers + Proposals + Payments**.
-6. **Phase 6 — Projects** (list per role, details, tasks, files, feedback, approvals).
-7. **Phase 7 — Project Pipeline** (Specification → Script → Client Script Approval → Design → Production → QA → Client Review → Changes → QA → Client Approval → Publication, shown as a timeline/stepper; Changes loops back to Production).
-8. **Phase 8 — Client Portal** (client sees only their own project(s)).
-9. **Phase 9+ — Airtable, n8n, AI Agents, MCP, Google Calendar, QA, End-to-end demo** — backend/integration work, not UI-only.
+**IQRAA is not intended to replace every external tool employees currently use.**
+
+IQRAA = the central ERP / project-workspace for managing learning projects, clients, teams, tasks, processes, progress, billing, decisions and operational information.
+
+External tools remain complementary and stay outside IQRAA — the product should link/reference them where useful (e.g. a link to a Drive folder, a Doc, a Figma file on a project record), not attempt to recreate or replace them:
+- **Google Calendar** — employees schedule meetings independently.
+- **Outlook Calendar** — used independently where relevant.
+- **Gmail** — communication.
+- **Google Docs / Google Slides** — scripts and documents.
+- **Google Drive** — files and shared resources.
+- **Figma** — design.
+- Other external tools, as appropriate.
+
+> **Core principle**: one central workspace for managing the work — not one tool that replaces every tool.
+
+This is the lens for every future scope decision in this project: if a feature request is "let's rebuild [external tool] inside IQRAA," the default answer is no — link to it instead. The one deliberate exception the product carves out of this rule is meetings, which get a lightweight, project-scoped record inside IQRAA (see §6) — not because IQRAA is becoming a calendar, but because *decisions made in meetings* are core operational history the project workspace needs to hold.
+
+## 2. MVP scope
+
+**In scope:**
+- Secure login/authentication architecture (provider TBD — see §5)
+- Hebrew + Arabic UI, both RTL (see §12)
+- Role-based access, enforced at the data/UI level (see §4)
+- Internal IQRAA Workspace: shell, role-based navigation (see §8–9)
+- Admin / CEO dashboard: Overview, Leads, Active Projects, Projects Ready to Start, PM workload, Billing overview, Recent activity
+- Leads, Clients, Projects, project workspace, project stages, tasks, team management, PM assignment (see §7, §10)
+- Workload visibility, billing/payment visibility
+- Client portal
+- Project resources/links, client feedback, approvals
+- Meetings & Decisions (see §6)
+- Project history/activity
+- Notifications, Settings
+- Responsive design, accessibility (see §15)
+
+**Out of MVP** (documented as possible future integrations, not current work — don't plan or implement any of these without being explicitly asked to revisit this scope):
+- Google Sign-In / Google OAuth
+- Google Calendar integration
+- Outlook Calendar integration
+- Calendar synchronization of any kind (automatic employee calendar import, event sync)
+- A full internal calendar replacement
+- Replacing Gmail
+- Replacing Google Docs
+- Replacing Google Drive
+- Replacing Figma
+- Building every external tool inside IQRAA
+
+The previous reason for considering Google OAuth was mainly to support Google Calendar integration; since Calendar is now out of MVP, Google OAuth has no remaining justification either — see §5 for what replaces it as the auth direction, and §18 for what this means for the existing Login screen's code.
+
+## 3. Project roadmap (source: `../AI_Learning_Operations_ERP_Development_Checklist(1).docx`, filtered through §1–§2)
+
+Current phase: **All 13 `screens.md` §38 build steps done** — shared Workspace shell, Admin/PM/Team-Member/Client Overview, Projects List + Project Workspace, Project Tasks + Task Details, Meetings & Decisions + Project History, Leads + Clients, Billing, Team Management, Client Portal, Settings, and a final responsive/accessibility/i18n audit pass (see the "Shipped screens" note below for what that means concretely). Phase 1 (Landing + Login + Accessibility statement page) is built and converted from React to plain HTML/CSS/JS (see §18). The Login screen's "Sign in with Google" button was removed on 2026-09-21b per §2 — Login is a single email/password form now. Don't reintroduce a Google/OAuth sign-in control without a new product-direction decision. **This is a UI/frontend milestone, not a project-complete one** — everything below still reads from `js/data/mock-data.js`, a static in-memory dataset; Airtable, n8n, AI Agents and RAG integration (Phase 9+, §3's earlier framing) haven't started.
+
+**Shipped screens (2026-09-21f, all 13 steps):**
+- `js/data/mock-data.js` — the one shared static mock dataset (projects, clients, project managers, team members, leads, tasks, meetings, pipeline stages, recent activity, client feedback, and the demo identities `currentPmId`/`currentTeamMemberId`/`currentClientId`) every screen reads from, so the same record looks the same everywhere it appears. Projects reference clients by `clientId`, never a raw name string. Each project carries `totalValue`/`received`/`invoiceDueDate` for billing — `data.kpis` deliberately does **not** duplicate an "outstanding payments" number; `ph.billingTotals()` computes it so Admin Overview and Billing Overview can never disagree.
+- `js/services/project-helpers.js` — the shared logic layer for every Workspace screen: status/task/priority/payment/invoice → badge tone, date/currency formatting, PM/client/stage/team-member lookups, `billingTotals()`, `needsClientAction()`, `pipelineStepperHtml()`, plus shared render functions (`renderProjectsTable`, `renderStageSummary`, `renderActivityList`, `renderTaskBoard`, `renderMeetingsList`) and the shared `fieldRow()`/`badge()` markup builders. Extend this file rather than re-deriving the same logic in a new page script — it's what let Admin/PM/Team-Member Overview, and Project Workspace/Client Project View's pipeline stepper, share real code instead of triplicating it.
+- **Admin**: `dashboard-admin.html` (Overview), `projects.html` (all projects), `leads.html`, `clients.html`, `billing.html`, `team.html`.
+- **PM**: `dashboard-pm.html` (Overview, filtered to `currentPmId`), `projects.html` ("My Projects", role-filtered).
+- **Team Member**: `dashboard-team.html` ("My Workspace"), `my-tasks.html` (every task assigned to them, with a **quick status update** `<select>` per row — a flat list, distinct from Project Workspace's per-project kanban), `projects.html` ("My Projects", role-filtered).
+- **Client**: `dashboard-client.html` (Overview — active projects + pending actions, deliberately thin, no internal detail per CLAUDE.md §4), `client-project.html` (the client-safe counterpart to Project Workspace: progress/stage/pipeline stepper/resources/contact-PM, **plus real Approve / Request Changes actions** that advance `project.stageKey` and log to `data.recentActivity`, and a feedback form backed by `data.clientFeedback`). Client Portal (Step 11) deliberately reuses `ph.pipelineStepperHtml()` for stage transparency but does **not** reuse Project Workspace's task board/team roster/history — CLAUDE.md §4's "clients must not see internal staffing/workload/notes" boundary is enforced by using a separate render path, not a filtered view of the internal one.
+- **Shared across all four roles**: `project-workspace.html` (internal project detail — tasks, pipeline, meetings & decisions, history, team, resources; PM/Team-Member access is blocked for projects not assigned to them, a real "restricted" state, not just a hidden link) and `settings.html` (Step 12 — Profile + Preferences for everyone, a read-only System Settings pipeline-stages reference for Admin only, no password/secret field anywhere).
+- `js/components/modal.js` / `css/components/modal.css` — the one shared modal (Task Detail, Lead/Team-member Details/Create/Edit). Mounted via a `#modal-root` placeholder + `workspace-chrome.js` calling `ns.components.modal.init()` — only pages that use it include the placeholder/script tag.
+- `css/pages/list-page.css` — shared search+filter+panel layout for every list screen (Projects, Leads, Clients, My Tasks, Team).
+- `css/components/data-display.css` — every reusable Workspace primitive: panel, badge, KPI card, data table (mobile card-collapse), progress bar, avatar, activity list, pipeline stepper, task board/kanban card, meeting timeline item, `.list-row` (icon+title+badge row), `.field-row` (label-above-value — used everywhere from Project Workspace's header facts to modal bodies to Client Overview's project cards), `.checkbox-row`, and a shared `.select`. Three real bugs were caught and fixed while building this: an empty `<h2>` in the modal before first open (pa11y-flagged), `.field-row`/`.list-row` markup that a page had started using without loading the stylesheet that defined it (page-scoped classes that only worked on the one page that happened to define them — now consolidated here so every page gets them via `shared.css`), and `.panel`/`.modal-overlay` both set `display` unconditionally, which silently beats the browser's `[hidden]{display:none}` rule (the same gotcha CLAUDE.md §15 already documented once) — both now have an explicit `[hidden]{display:none}` override.
+- **Role resolution for pages reachable by more than one role** (`projects.html`, `project-workspace.html`, `settings.html`): these don't set `window.IQRAA_ROLE`. `workspace-chrome.js` persists whichever role single-role pages *do* set into `sessionStorage["iqraa-demo-role"]`, and falls back to reading it back on pages that don't set one — the final resolved role is exposed as `window.IQRAA_RESOLVED_ROLE`. A fresh session with nothing in `sessionStorage` defaults to Admin.
+- **Step 13 audit findings**: a full `he`/`ar` key-parity check (370 keys each, zero gaps either direction) confirmed no translation drift across the whole build; a hardcoded-string sweep found and fixed one pre-existing violation unrelated to Steps 1–12 — `header.js`'s public-site nav had a literal `aria-label="Primary"` since the original React→HTML conversion, now `header.primaryNavLabel`; a `@media` breakpoint audit found the Workspace consistently switches at `960px` (matching the sidebar's collapse point) with `719px`/`640px`/`1200px` used deliberately for table-collapse and KPI-grid column-count thresholds, not drift. No fake loading-spinner states were added anywhere — every Workspace screen renders synchronously from local mock data, so a real loading state has nothing to demonstrate yet; that becomes relevant once Airtable fetches are real (Phase 9+), not before. `css/pages/dashboard-placeholder.css` and its `.dash-card*` classes were deleted once the last page using them (`dashboard-client.html`) got real content — confirmed nothing else referenced them first.
+- **What's still explicitly a demo simplification, not a gap to "fix" reflexively**: Team Management has no "remove member" (no destructive-confirmation pattern exists yet in this codebase); My Tasks/Project Workspace resources are demo-only badges (no real external URLs to point to, per the "don't invent URLs" rule); the pipeline stepper always shows all 11 stages including "Changes" even for projects that never needed a revision round — the stepper is a fixed reference sequence, the actual conditional branching is described in `pipeline.changesNote` text, not modeled as stepper logic.
+
+Build order (don't jump ahead of this without being asked). **Phases 1–8 are UI-done** (all 13 `screens.md` §38 steps shipped — see the "Shipped screens" note above); **Phase 9 is next** and hasn't started:
+1. ✅ **Phase 1 — Foundation**: Landing/Welcome, Responsive, Accessibility, Login, Hebrew/Arabic infrastructure, secure authentication architecture (see §5 — architecture only, not the final implementation), role detection.
+2. ✅ **Phase 2 — Internal Application Shell**: Sidebar, Header (app shell, not the marketing header), role-based navigation, User Profile, workspace layout, responsive behavior (see §8–9). Notifications and Breadcrumbs are the two shell pieces still not fully built — a notification-bell popover shell exists but no real Notification Center, and no breadcrumb trail (nothing multi-level enough to need one yet).
+3. ✅ **Phase 3 — Admin / CEO Workspace**: Overview, Leads, Active Projects, Projects Ready to Start, PM workload, Billing overview, Recent activity — mock data.
+4. ✅ **Phase 4 — CRM / Leads / Clients**: Leads list/details/create/edit, lead status & qualification, client records, client/project relationship.
+5. ✅ **Phase 5 — Projects**: project list, project details/workspace, project stages, team, tasks, resources, project history, Meetings & Decisions (see §6–§7), client feedback, approvals.
+6. ✅ **Phase 6 — Team Member Workspace**: My Workspace, My Tasks, My Projects, task details, status updates. (Task/project *comments* specifically weren't built — task detail has a "comments coming soon" note, not a real thread.)
+7. ✅ **Phase 7 — Client Portal**: client dashboard, project status, progress, current stage, relevant resources, feedback, approvals, contact PM (client sees only their own project(s)).
+8. ✅ **Phase 8 — Billing / Administration**: payments, invoice status. User management (Team Management) is built too, but without a "remove member" action (§9's shipped-screens note explains why) and without real user-account/settings administration beyond what `settings.html` already covers.
+9. **Phase 9 — Integration & Automation** (not started): Airtable connections, n8n workflows, notifications, operational automations, AI agents where relevant, additional integrations only when justified (see §19). Google Calendar / Outlook / Google OAuth do **not** appear here or anywhere else in this roadmap — they're out of MVP per §2, not merely deferred to a later phase.
 
 **Explicit "don't do yet" list from the project owner:**
 - Don't build new AI Agents.
 - Don't add new n8n workflows before the basic UI is clear.
 - Don't wire every screen to Airtable immediately.
-- Don't touch Google Calendar yet.
+- Don't build Google Calendar / Outlook Calendar integration or Google Sign-In — out of MVP scope entirely (§2), not a "later phase" item.
+- Don't implement the final authentication provider yet — document the architecture (§5) and stop there until asked to implement it.
 - Don't add complex permissions before the Role structure exists.
 - Don't add more RAG content if the existing RAG is ready.
-- Don't give Claude Code one giant whole-project prompt — one task at a time, check, approval, next task.
+- Don't give Claude Code one giant whole-project prompt — one task at a time, check, approval, next task (see §20).
 
-## 2. Roles (drives every dashboard/screen from Phase 2 onward)
+## 4. Roles (drives every dashboard/screen from Phase 2 onward)
 
-| Role | Sees |
-|---|---|
-| Admin / CEO / VP | Everything: Leads, Customers, Proposals, Projects, all statuses, user/PM assignment |
-| Project Manager | Only projects assigned to them; stage/task/team management; PM AI Agent |
-| Team Member | Only tasks/projects assigned to them |
-| Client | Only their own project(s); read-only + approval actions; Client AI Agent |
+Enforce this as real data/UI scoping (filter what's rendered/fetched per role), not just hidden nav items — this applies with extra weight to the Client role, who must never receive internal-only data even in an API response that a hidden UI element simply doesn't render.
 
-Enforce this as real UI scoping (filter what's rendered/fetched), not just hidden nav items.
+**1. Admin / CEO** — full operational visibility:
+- Leads, Clients, Projects (all statuses, all stages)
+- Team / user management, Project Manager assignment
+- Billing
+- System settings
+- Workload/availability visibility across Project Managers
 
-## 3. Brand identity
+**2. Project Manager** — scoped to their own assigned projects:
+- Assigned projects only
+- Project team, tasks, project stages
+- Client relationship for their projects
+- Meetings & Decisions
+- Project progress, client feedback, approvals, project completion
+
+**3. Team Member** — scoped to their own assignments:
+- Assigned projects and assigned tasks only
+- Task status
+- Resources, comments
+- Relevant project information
+- Meetings & Decisions where relevant to their work
+
+**4. Client** — scoped to their own project(s), read-only + approval actions:
+- Own project(s) only — progress, current stage, expected completion
+- Relevant links/resources
+- Feedback / approval actions where applicable
+- Project-related meeting/decision information only when appropriate
+
+Clients must **not** see internal information: internal staffing details, internal notes, internal QA discussions, internal workload, other clients/projects, or any other internal operational data.
+
+## 5. Authentication — real, implemented (2026-09-21h)
+
+**Built and live-tested, not just designed.** The Login page (`pages/login.html`, unchanged UI) authenticates against Airtable through the backend at `backend/server.js` — see that folder's README for the full endpoint contract, and §19c below for how this fits the rest of the backend/Airtable architecture.
+
+- **Airtable is the system of record** for application users, roles, status and profile information. It is **never** used as a password database in plaintext — the `Password Hash` field holds a bcrypt hash only, verified server-side with `bcrypt.compare()`. Nothing decrypts or reverses it; nothing ever sends it to the frontend.
+- Frontend → Backend → Airtable, always. The browser never talks to Airtable directly and never sees an Airtable PAT, a Password Hash, or the session secret (`js/services/auth.js` only ever calls `backend/server.js`'s `/api/auth/*` endpoints, with `credentials:"include"`).
+- Session = server-side (`express-session`) + an `httpOnly` cookie (`iqraa.sid`). `js/workspace-chrome.js` calls `GET /api/auth/me` on every Workspace page load to confirm the session is still valid before rendering anything — see §9 for how this gates page access.
+- *Authentication* (who the user is — the login flow above) and *authorization* (role-based access, §4) are separate: role comes from Airtable's `Role` field, mapped to this app's 4-role model server-side (`AIRTABLE_ROLE_TO_APP_ROLE` in `server.js`), and is authoritative on both the backend (`requireRole()` middleware, e.g. on `POST /api/users`) and the frontend (workspace-chrome.js's page-access gate) — never trust a frontend-only check for anything that reads/writes real data.
+- Google OAuth remains explicitly **not** used anywhere in this flow — this is plain email+password against Airtable, not a third-party identity provider. (Google OAuth is a separate, still-unconfigured placeholder button on the Login page itself, per §18's external-integration-placeholder convention — unrelated to this backend-Airtable flow and not touched by it.)
+
+## 6. Meetings & Decisions — project-level concept
+
+Do **not** build a traditional "Meetings Dashboard" or a calendar inside IQRAA, and do not require employees to manually log every meeting they have. This is a deliberate product decision, not a missing feature.
+
+Instead, meetings belong to the context of a **project**, as a "Meetings & Decisions" record on that project. Its purpose is to document meaningful meetings and, more importantly, what was decided and what needs to happen afterward. A meeting record may contain:
+- Meeting type
+- Date
+- Participants
+- Summary
+- Decisions
+- Follow-up tasks
+- Optional meeting link
+- Optional notes/resources
+
+The system should answer **"what was decided in the last important client meeting and what needs to happen next?"** — it should **not** primarily try to answer "when is this employee's next meeting?" Meeting history is part of the project's operational history (§7), not a scheduling tool. Upcoming meetings may optionally be recorded, but employees are never required to maintain a complete calendar inside IQRAA.
+
+If calendar integrations are ever added in the future (they are explicitly out of MVP — §2), they could eventually auto-populate this section, but that's a future enhancement to design for later, not something to build now. **Built**: `pages/project-workspace.html`'s "Meetings & Decisions" panel, `js/data/mock-data.js`'s `meetings` array, `ph.renderMeetingsList()` — see §9's shipped-screens note.
+
+## 7. Project model
+
+The core product remains project-centered. A project brings together the information needed to manage the work:
+
+- Client
+- Project status
+- Project stage
+- Overall progress
+- Project Manager
+- Team
+- Tasks
+- Deadlines
+- Files/resources
+- External links (to Drive, Docs, Figma, etc. — see §1, not copies of that content)
+- Client feedback
+- Approvals
+- Billing/payment status
+- Meetings & Decisions (§6)
+- Project history/activity
+
+The project workspace is the central place where the operational story of the project is visible — this organizing idea is what `pages/project-workspace.html` and `pages/client-project.html` are both built around (§3, §9).
+
+## 8. Internal Workspace UI vs public / auth UI
+
+The internal application must **not** look like the public landing page or the Login screen. Keep a clear visual distinction between:
+
+- **A. Public / authentication experience** — Landing + Login. Marketing-register: large display type, full-bleed photo panels, generous whitespace. The patterns in §11–17 (brand pane + scrim, big display headings, compact tile grid) belong to this surface.
+- **B. Internal IQRAA Workspace** — everything behind login (Phase 2 onward, §3). Still built on the IQRAA brand identity (colors, typography, visual language — §11, §13), but functional, information-dense, structured, and optimized for daily work: dashboards, tables, tasks, project management. It should feel like a professional ERP/workspace, not a generic SaaS template, and not a second marketing surface.
+
+Don't carry the Landing/Login marketing patterns (large display headings, photo brand panes) into internal screens wholesale — the internal shell (§9) has its own denser conventions instead: `.panel`/`.kpi-card`/`.data-table`/etc. (`css/components/data-display.css`), never the marketing surface's hero/tile patterns.
+
+## 9. Internal app shell & role-based navigation
+
+Built 2026-09-21 (Phase 2 §3 / `screens.md` §38 Step 1) as the first internal-Workspace screen — a shared shell every Workspace page mounts into. By the time all 13 `screens.md` §38 steps shipped, every one of the 4 roles had a real page built on this same shell.
+
+The internal workspace shell:
+- **Right-side sidebar** (`js/components/sidebar.js` + `css/components/sidebar.css`) — role-aware nav list, right-side placement comes purely from DOM order (`#sidebar-root` is the first child of `.workspace-shell`) plus the fixed `dir="rtl"`, not from an explicit `order`/mirroring trick (same principle as §13's photo-pane pattern). Desktop (≥960px): a static column, fixed at `--sidebar-width` (`css/tokens.css`). Mobile: a full-screen overlay + sliding panel, structurally identical to `.mobile-menu-overlay` (`css/components/mobile-menu.css`) but its own implementation, not a shared one — **important gotcha already paid for**: the overlay's `justify-content` has to match which side the *toggling button* sits on for that specific header (first-vs-last DOM child flips the RTL side), don't copy `mobile-menu-overlay`'s `flex-end` value without checking the toggle button's position in the new context.
+- **Top navigation/header** (`js/components/workspace-header.js` + `css/components/workspace-header.css`) — page title (the page's own `<h1>`; every panel heading below it is an `<h2>`, don't reintroduce a second `<h1>` per page), a notifications bell (popover shell only — trigger + empty-state panel; real Notification Center content is still unbuilt, per `screens.md` §21/§34), the language selector (`language-toggle.js` reused as-is, unchanged), and a user menu (avatar initial, name, role label, sign-out — reuses the exact same open/close/click-outside/Escape pattern as the bell popover via one shared `wirePopover()` helper rather than two near-duplicate implementations).
+- **Bootstrap script**: `js/workspace-chrome.js` — the internal-app analog of `js/chrome.js`, mounting sidebar + header + the accessibility widget then calling `translatePage()`. Kept as a separate file rather than branching `chrome.js` by page type, since the two mount entirely different component sets.
+- Breadcrumbs and a desktop sidebar-collapse affordance are **still deliberately not built** — every Workspace screen so far is one level deep (a sidebar item, or that item plus a single detail page reached via a link/`?id=`), so there's no multi-level navigation yet for a breadcrumb trail to represent. Add them if a future screen genuinely needs multi-level navigation, not speculatively.
+- Role-aware navigation — the sidebar renders per the user's **real, session-derived role** (`session.user.role` from `GET /api/auth/me`, via §5's real auth). `window.IQRAA_ROLE` still exists as a per-page constant on single-role Workspace pages, but as of 2026-09-21h its meaning flipped: it's the **role required to view this page** (an access gate), not a role to render. `js/workspace-chrome.js` checks it against the real session role and redirects to the user's own dashboard on a mismatch (or to Login if there's no session at all) — see §19c for the full mechanism, including the shared `ns.workspaceAuthReady` promise other page scripts await for the verified role. Pages reachable by more than one role (`projects.html`, `project-workspace.html`, `settings.html`) simply don't set `IQRAA_ROLE`, same as before. The old sessionStorage-persisted-demo-role fallback described in earlier revisions of this file is gone — a real session is authoritative now.
+
+Per-role navigation (`sidebar.js`'s `NAV_ITEMS` map) — ✅ = real link, — = still a disabled "coming soon" `<button>` (not a dead `href="#"` link or a silently-inert control):
+- **Admin / CEO**: Overview ✅, Leads ✅, Projects ✅, Team ✅, Clients ✅, Billing ✅, Settings ✅
+- **Project Manager**: Overview ✅, My Projects ✅, Tasks —, Clients —, Settings ✅
+- **Team Member**: My Workspace ✅, My Tasks ✅, My Projects ✅, Profile ✅ (→ `settings.html`)
+- **Client**: My Workspace ✅, Projects ✅ (→ `client-project.html`), Contact —, Profile ✅ (→ `settings.html`)
+
+PM's "Tasks" (a cross-project task list, distinct from My Tasks which is Team-Member-only) and "Clients" (a PM-scoped client view) remain unbuilt — out of scope for the 13 `screens.md` §38 steps that have shipped; build them only if a future task asks for that specific PM capability. Client's "Contact" stays disabled deliberately — "contact PM" is provided contextually inside `client-project.html` instead of as a separate page, so a second nav entry pointing at the same destination would be redundant.
+
+The exact screen inventory (every screen under each nav item) is documented separately in `screens.md` — this section is the shell/navigation shape, not the per-screen content.
+
+## 10. Admin / CEO project assignment flow
+
+Built (Admin Overview, §3) — `pages/dashboard-admin.html`'s "Projects Ready to Start" panel + `js/pages/dashboard-admin.js`'s `assignPm()`.
+
+- When the first project payment is received, the project becomes ready to start and appears in an Admin / CEO **"Projects Ready to Start"** area (`status: "readyToStart"`, `pmId: null` in `js/data/mock-data.js`).
+- The Admin / CEO reviews Project Manager workload (§9's PM Workload panel) before assigning a Project Manager to the project via the select + confirm control in that row.
+- Workload is **derived from actual project/task information** (`data.projects`/`data.tasks` filtered by `pmId`/`assigneeId`), never manually typed in by anyone.
+- Once a Project Manager is assigned, `assignPm()` sets `pmId`, moves `status` to `"onTrack"`, `stageKey` to `"specification"`, and the project now shows up everywhere a PM's assigned projects are read from (`ph.projectsForPm` — Projects List, PM Overview, Project Workspace's role gate) — §4's PM scope takes over from there.
+
+## 11. Brand identity
 
 - **Company**: IQRAA Digital Learning LTD ("IQRAA" = Arabic for "Read"). This is who owns/operates the product.
 - **Product**: AI Learning Operations ERP. This is what the company built.
@@ -53,23 +232,23 @@ Enforce this as real UI scoping (filter what's rendered/fetched), not just hidde
 - Both names stay in Latin script / untranslated in both Hebrew and Arabic UI — they're proper nouns.
 - Company name should visibly appear on the Login page (explicit requirement).
 
-## 4. Language & RTL — how it actually works here
+## 12. Language & RTL — how it actually works here
 
-Hebrew and Arabic are **both RTL**. `dir="rtl"` is fixed once in `index.html` and never toggled — don't add per-language `dir` switching logic, it isn't needed and got explicitly corrected once already.
+The application supports **exactly two UI languages: Hebrew and Arabic.** The user chooses the language. Both are RTL — do not introduce English or any LTR behavior anywhere in this product; that's a deliberate scope boundary, not an oversight. `dir="rtl"` is fixed once in `index.html` and never toggled — don't add per-language `dir` switching logic, it isn't needed and got explicitly corrected once already.
 
 What *does* change per language:
-- `document.documentElement.lang` (set by `LanguageProvider`).
-- Font family: `--font-family` token is **Assistant** for Hebrew; `html[lang="ar"] body` overrides to **IBM Plex Sans Arabic** (`src/styles/global.css`). Both loaded via the Google Fonts `@import` at the top of `global.css`.
-- Every visible string, via `src/i18n/translations.ts` (a typed `Translations` interface, `he` and `ar` objects) + `useLanguage()` from `src/i18n/LanguageContext.tsx`.
+- `document.documentElement.lang` (set by `js/i18n/i18n.js`'s `setLanguage()`).
+- Font family: `--font-family` token is **Assistant** for Hebrew; `html[lang="ar"] body` overrides to **IBM Plex Sans Arabic** (`css/global.css`). Both loaded via the Google Fonts `@import` at the top of `global.css`.
+- Every visible string, via `js/i18n/translations.js` (plain `he`/`ar` objects, same shape as before) + `js/i18n/i18n.js`'s `translatePage()`, which walks `[data-i18n="some.key.path"]` (sets `textContent`, dotted path can include array indices, e.g. `hero.highlights.0`) and `[data-i18n-attr="attr:some.key"]` (sets an attribute, `;`-separated for more than one) on every element and applies the current language's strings. Call `IQRAA.i18n.translatePage()` again after injecting any new HTML at runtime (see `js/chrome.js` and any page script for the pattern) — nothing re-translates itself automatically the way React did.
 
-**Rules for every new screen:**
-- No hardcoded UI strings, ever — not in JSX text, not in `aria-label`, `alt`, `title`, placeholder, etc. Add a key to `Translations` and both `he`/`ar` objects.
+**Rules for every new screen** (this applies to every UI surface listed in §2 — navigation, sidebar, header, forms, tables, cards, modals, status labels, buttons, empty states, error messages, notifications, accessibility labels, tooltips, placeholders, validation messages — all of it needs both Hebrew and Arabic entries, no exceptions):
+- No hardcoded UI strings, ever — not in markup text, not in `aria-label`, `alt`, `title`, placeholder, etc. Add a key to both `he` and `ar` objects in `js/i18n/translations.js` and reference it via `data-i18n`/`data-i18n-attr`.
 - Write real, natural Arabic (professional register matching the Hebrew tone), not machine-literal translation.
 - Language selection persists via `localStorage` (`iqraa-language` key) — already handled by the provider, nothing to do per-screen.
 - The language switcher is a **dropdown button** (shows current language, opens a small listbox below on click) — not a toggle pill. This was explicitly requested; don't revert to a segmented toggle.
-- **Big display headings need per-language tuning, not just translation.** Hebrew display type (`.hero h1` etc. in `LandingPage.module.css`) uses `font-weight: 800`, tight `line-height: 0.94` and `letter-spacing: -0.07em` — this looks fine in Hebrew but collides Arabic diacritics/ligatures into the line above and reads as too-bold in Assistant. The established fix: scope overrides with `html[lang="ar"] …` / `html[lang="he"] …` selectors — Arabic gets `line-height: 1.35`, `letter-spacing: normal`; Hebrew's big headings were dialed back to `font-weight: 700`. Apply the same instinct to any new big display heading: check it in both languages, don't assume the Hebrew tuning transfers.
+- **Big display headings need per-language tuning, not just translation.** Hebrew display type (`.landing-hero h1` etc. in `css/pages/landing.css`) uses `font-weight: 800`, tight `line-height: 0.94` and `letter-spacing: -0.07em` — this looks fine in Hebrew but collides Arabic diacritics/ligatures into the line above and reads as too-bold in Assistant. The established fix: scope overrides with `html[lang="ar"] …` / `html[lang="he"] …` selectors — Arabic gets `line-height: 1.35`, `letter-spacing: normal`; Hebrew's big headings were dialed back to `font-weight: 700`. Apply the same instinct to any new big display heading: check it in both languages, don't assume the Hebrew tuning transfers.
 
-## 5. Design tokens (`src/styles/tokens.css`) — use these, never hardcode
+## 13. Design tokens (`css/tokens.css`) — use these, never hardcode
 
 ```
 --background: #f8f7fb        --text: #201d2b
@@ -80,49 +259,67 @@ What *does* change per language:
 --container-max: 1180px      --header-height: 76px
 ```
 
-Full spacing/radius/shadow/font-size scale is in the file — reuse it, don't invent new magic numbers. Everything is `rem`-based on purpose: the accessibility text-size control (§7) works by scaling root `font-size`, and it silently breaks for anything sized in raw `px`.
+Full spacing/radius/shadow/font-size scale is in the file — reuse it, don't invent new magic numbers. Everything is `rem`-based on purpose: the accessibility text-size control (§15) works by scaling root `font-size`, and it silently breaks for anything sized in raw `px`.
 
 ### Color contrast — lessons already paid for
 - **Never use `var(--primary)` as text color on `var(--primary-pale)` background.** Measured contrast is 4.29–4.39:1, which fails WCAG AA (4.5:1). Use `var(--primary-dark)` for text-on-pale-bg instead (verified ~6.4:1+). This exact bug shipped once (workflow section) and was only caught by running pa11y, not by eye.
 - Never introduce ad-hoc gray hex values (`#667085` etc.) for secondary text — always `var(--text-secondary)`, which is contrast-verified. If a color isn't a token, that's a signal to double-check it.
-- Photo tiles with text over them (see `.productTile` in `LandingPage.module.css`) need a dark scrim of **at least 0.7 opacity black**, not 0.5–0.6 — the scrim has to work against the *brightest* photo you might put behind it, not the average one. Pair it with a `text-shadow` on the text for extra margin.
+- Photo tiles with text over them (see `.landing-product-tile` in `css/pages/landing.css`) need a dark scrim of **at least 0.7 opacity black**, not 0.5–0.6 — the scrim has to work against the *brightest* photo you might put behind it, not the average one. Pair it with a `text-shadow` on the text for extra margin. **Exception, deliberately chosen (2026-09-21)**: the small 150×150 product tiles now use a lighter `0.48` scrim so the photo reads through more clearly at that size — legibility is preserved by a much stronger `text-shadow`/badge background instead of scrim opacity. This is a tile-size-specific tradeoff, not a reversal of the ≥0.7 rule — any *large* photo panel (like the login brand pane) still needs ≥0.7.
 - A translucent **white** badge/pill placed on top of that dark scrim actively undermines it (it lightens the effective background back up). Badges over photos should be dark-tinted (`rgba(0,0,0,…)`) with a light border, not light-tinted.
-- **Run a real contrast check, don't eyeball it.** See §8.
+- **Run a real contrast check, don't eyeball it.** See §16.
 
-## 6. Typography weight
+### Full-panel photo + scrim, collapsing to a top banner on mobile
+
+Established on the Login page brand pane (`.login-brand-pane` in `css/pages/login.css` / `pages/login.html`) — reuse this exact structure for any future *public/auth* screen (§8) that wants a large marketing/brand photo panel (not just small tiles):
+
+- Markup: an `<aside>` (or similar) with `background-image` set inline via `style="background-image:url('…')"`, containing a `<div class="…__scrim" aria-hidden="true">` (absolutely positioned, `inset:0`, `rgba(8,6,20,0.74)` or similar — same ≥0.7-opacity-black rule as photo tiles) as the **first** child, then a `<div class="…__content">` (`position:relative; z-index:1`) wrapping all the real text content. The scrim needs its own element (not the pane's own `background`) so it can sit between the photo and the text in stacking order.
+- All text inside `…__content` needs color flipped to white/near-white (`#fff`, `rgba(255,255,255,0.85)` for secondary text) plus a `text-shadow` on headings for extra contrast margin — the pane's default token-based text colors (`var(--text)` etc.) assume a light background and will fail contrast on a photo.
+- **Responsive collapse pattern**: don't `display:none` the panel on mobile like the old flat-color version did. Instead give the pane a `min-height` (e.g. `260px`) by default (mobile-first) with `justify-content:center` on the content wrapper, and `display:none` *only* the secondary content (long paragraph, pill list, footer copyright) so the compact banner shows just the logo lockup + a short heading. At the desktop breakpoint (`min-width:960px` here), switch to `min-height:100vh`, `justify-content:space-between`, and re-show the hidden secondary content (`display:block`/`flex`). Because the photo pane is the first DOM child and the grid/flow is single-column below the breakpoint, it naturally renders *above* the form with zero reordering — don't add an explicit order/flex-order trick, the source order already does it.
+
+### Compact tile grid beside text (not spread across full width)
+
+Products section (`.landing-products-layout` in `css/pages/landing.css`/`index.html`, 2026-09-21 redesign): a fixed-size tile grid (currently `repeat(3, 150px)`, tiles don't stretch) sitting next to the heading/paragraph in a 2-column grid, rather than a full-width `auto-fill` mosaic stacked below the text. **Two lessons from the redesign that caused the original "smeared" look**: (1) never let the grid's track size (`grid-template-columns`) differ from the tile's own explicit `width`/`height` — a gap between the two (tracks wider than the tiles) reads as extra, uneven spacing beyond the intended `gap` value; keep them equal. (2) `auto-fill` reserves space for as many tracks as fit the container even when there's no content for them, which can visually spread a mosaic out unpredictably — for a small, fixed-count tile set, use an explicit fixed column count instead.
+
+### Required-field markers
+
+Text fields that are actually `required` get a visible `*` next to the label: nest the translated label text in its own `<span data-i18n="…">` inside the `<label>` (not directly as the label's `data-i18n`, since `translatePage()` overwrites the whole element's `textContent` and would wipe out a sibling asterisk), then add `<span class="text-field__required" aria-hidden="true">*</span>` right after it. `aria-hidden` because the `required` HTML attribute on the `<input>` already communicates required-ness to assistive tech — the asterisk is a sighted-user affordance only, not a second accessibility signal. See the contact form in `index.html` for the working pattern (4 required fields marked, the optional message textarea isn't).
+
+## 14. Typography weight
 
 - Body/UI text: whatever the component already uses (mostly 600 for labels/buttons).
-- Big marketing display headings: `font-weight: 800` in Arabic, `700` in Hebrew (Assistant reads heavier at 800 than the equivalent Arabic weight does — see §4). If a new screen introduces another huge display heading, check both languages before shipping.
+- Big marketing display headings: `font-weight: 800` in Arabic, `700` in Hebrew (Assistant reads heavier at 800 than the equivalent Arabic weight does — see §12). If a new screen introduces another huge display heading, check both languages before shipping.
 
-## 7. Accessibility — non-negotiable per screen
+## 15. Accessibility — non-negotiable per screen
 
 This app targets Israeli accessibility-law compliance (תקנות נגישות השירות, ת"י 5568 / WCAG 2.0 AA). Concretely, per new screen:
 
-- **Run `npx --yes pa11y http://localhost:5173/<route>` against the live dev server and get "No issues found" before calling a screen done.** This caught 15 real contrast failures and 7 broken anchor links in past rounds that manual review missed.
+- **Run `npx --yes pa11y http://localhost:<port>/<route>.html` against a static server and get "No issues found" before calling a screen done.** This caught 15 real contrast failures and 7 broken anchor links in past rounds that manual review missed — and, in the React→HTML/CSS/JS conversion, caught a real bug (a11y widget ARIA labels not translated on pages that forgot to call `translatePage()`).
 - Every interactive element needs an accessible name (visible text, or `aria-label` if icon-only).
 - Every hover/focus state needs a `transition` — snapping color changes without one were flagged and fixed.
 - Animate `transform`/`opacity` only. Never animate `top`/`left`/`width`/`height`/`margin` (`.skip-link` did this and was migrated to `transform: translateY()`).
 - `prefers-reduced-motion` is already handled globally in `global.css` (collapses all animation/transition durations) — don't fight it or duplicate it per component.
-- **In-page anchor links (`#services` etc.) must resolve on every page they appear on.** Header/Footer are shared across routes, so a plain `<a href="#services">` breaks (WCAG 2.4.1 NoSuchID) on any page other than the Landing page. Use `<Link to="/#services">` and rely on the global `useScrollToHash` hook (`src/hooks/useScrollToHash.ts`, wired in `App.tsx`) to scroll once the target route has rendered. This is already the pattern in `Header.tsx`, `MobileMenu.tsx`, `Footer.tsx` — follow it for any new nav link.
-- New forms: live-validate with the **touched-then-live** pattern already used in `LoginPage.tsx` and the contact form in `LandingPage.tsx` (error stays hidden until first blur/submit attempt, then re-evaluates on every keystroke). Don't ship a form that relies on bare HTML `required` with no visible feedback.
-- Loading states need a **visible spinner**, not just a text change — see the `Loader2` + `@keyframes spin` pattern in `LoginPage.tsx`/`LoginPage.module.css`.
+- **In-page anchor links (`#services` etc.) must resolve on every page they appear on.** This is a multi-page static site now (one real `.html` file per route), so a plain `<a href="index.html#services">` resolves natively via the browser on any page — no JS scroll hook needed anymore (the old `useScrollToHash` React hook existed only to work around SPA route-change timing and has no equivalent here). Just use the real filename in the href.
+- New forms: live-validate with the **touched-then-live** pattern already used in `js/pages/login.js` and `js/pages/landing.js` (error stays hidden until first blur/submit attempt, then re-evaluates on every keystroke, via `IQRAA.components.textField.setError(id, message)`). Don't ship a form that relies on bare HTML `required` with no visible feedback.
+- Loading states need a **visible spinner**, not just a text change — see the `loader-2` icon + `@keyframes login-spin`/`landing-spin` pattern in `css/pages/login.css`/`landing.css`. **Watch out for the `hidden` attribute + custom `display` gotcha**: if an element has both the `hidden` attribute and a class that sets `display` (e.g. `display:flex`), the class's author-stylesheet rule beats the browser's `[hidden]{display:none}` UA rule and the element stays visible. Every class used with `hidden` needs an explicit `.your-class[hidden] { display: none; }` override (see `.text-field__error[hidden]`, `.landing-form-error[hidden]`, `.login-form-success[hidden]` etc. for the pattern) — this shipped as a real bug once (success/error banners visible on page load) and was only caught by a screenshot, not by pa11y.
 - Global a11y infrastructure already exists — don't re-add it per page:
-  - `SkipLink` (`src/components/accessibility/SkipLink.tsx`) — "skip to main content."
-  - `AccessibilityWidget` (`src/components/accessibility/AccessibilityWidget.tsx`) — floating bottom-right button opening a panel with text-size steps, high-contrast toggle, underline-links toggle, reset, and a link to the statement page. Driven by `data-a11y-*` attributes on `<html>`, styled in `global.css`. Persists to `localStorage` (`iqraa-a11y-settings`).
-  - Accessibility statement page at `/accessibility` (`src/pages/Accessibility/`), linked from the Footer and from the widget panel.
+  - Skip link — one line, `<a href="#main-content" class="skip-link" data-i18n="meta.skipLink"></a>`, inlined directly in every page's `<body>` (global `.skip-link` class from `global.css`).
+  - `js/components/accessibility-widget.js` + `css/components/accessibility-widget.css` — floating bottom-right button opening a panel with text-size steps, high-contrast toggle, underline-links toggle, reset, and a link to the statement page. Driven by `data-a11y-*` attributes on `<html>`, styled in `global.css`. Persists to `localStorage` (`iqraa-a11y-settings`). Mounted via `IQRAA.components.accessibilityWidget.init()` into a `<div id="a11y-widget-root"></div>` placeholder — every page needs that placeholder div and the script tag, `js/chrome.js` handles the init call for the standard pages.
+  - Accessibility statement page at `pages/accessibility.html`, linked from the Footer and from the widget panel.
 - `:focus-visible` outline is global (`global.css`) — don't override it away on new components.
 - Every real `<img>` needs a translated, descriptive `alt`. (Most imagery on this site is CSS `background-image` on a tile with a visible text title over it, which doesn't need `alt` — but if you add a genuine `<img>`, it does.)
 
-## 8. Verification checklist — run this before calling any screen finished
+## 16. Verification checklist — run this before calling any screen finished
 
 ```bash
-npx tsc -b                                    # types
-npx oxlint                                    # lint
-npx --yes pa11y http://localhost:5173/<route> # real WCAG2AA check, not a guess
+npx oxlint js                                              # lint (plain JS, no TS/React rules anymore)
+npx --yes serve . &                                        # static server (or: python -m http.server 3000)
+npx --yes pa11y http://localhost:3000/pages/<route>.html   # real WCAG2AA check, not a guess
 ```
-All three should be clean (pa11y: "No issues found") before reporting the work as done. If the dev server isn't already running, `npm run dev` first.
+(`index.html` is the one route without the `pages/` prefix — see §18.) Both should be clean (pa11y: "No issues found") before reporting the work as done. `npm run dev` runs the `serve` step for you.
 
-## 9. Sourcing images — verify, don't guess
+Also open the page directly via `file:///…/<route>.html` in a browser at least once per screen — the whole point of this stack is that it needs no build step and no server, so confirm that's actually still true (classic `<script src="...">` tags, no `type="module"`/bare `import`, no `fetch()`-based HTML includes — all of those break under `file://`).
+
+## 17. Sourcing images — verify, don't guess
 
 Never invent or guess an Unsplash photo ID and drop it in. The process that's worked:
 1. Use `WebSearch`/`WebFetch` against `unsplash.com/s/photos/<query>` to find real candidate photos and their `images.unsplash.com/photo-…` CDN URLs.
@@ -132,20 +329,93 @@ Never invent or guess an Unsplash photo ID and drop it in. The process that's wo
 
 **Image-selection judgment calls that got corrected in review, worth remembering:**
 - Match the image to the *specific concept*, not a generic proxy. "Hybrid course" needed a photo that visibly shows the online+in-person blend (people in a room watching a colleague on a video call screen), not just any office photo. "Digital learning product development" needed a visible screen/wireframe, not just people talking.
-- Don't force representation (e.g. hijab-wearing subjects) into every image for cultural-fit reasons if it makes the image less accurate to its actual subject — for a lot of tiles (games, simulations, tools, screens) an object/hands-only photo with no people at all is both more accurate *and* sidesteps representation risk entirely. Use real, modest, professional representation where a person genuinely belongs in the shot; don't manufacture it where it doesn't.
+- For tiles/panels where no person needs to be visible (games, simulations, tools, screens), an object/hands-only photo is often both more accurate to the concept *and* simpler — prefer it when it fits, but that's a fallback, not the goal in itself. See the rule below for what to do once a photo *does* show a person's face.
 - Modesty/brand fit matters for this specific company (IQRAA, Arab-Muslim-oriented branding) — screen out anything with revealing clothing, alcohol, or club/party styling before it goes anywhere near the site, the way the original "סרטוני הדרכה" tile photo had to be swapped out.
 
-## 10. Tech stack & conventions
+### Critical rule: identifiable people in photos must read as Muslim (2026-09-21)
 
-- React + TypeScript + Vite + React Router. Plain CSS via CSS Modules + the token system in §5 — **no UI framework**, don't introduce one.
-- Icons: `lucide-react` only.
-- One `.module.css` co-located per component/page, imported as `styles`.
-- No dead code: an earlier audit found a whole unused `sections/*` folder and an unused `Card.tsx` component sitting in the repo, never imported anywhere. If you scaffold something, wire it up or don't leave it behind.
-- Dev server: `npm run dev` → `http://localhost:5173`.
+**Any photo used anywhere on this site that shows an identifiable person's face must depict a Muslim man or a Muslim woman** (women in hijab; general modest, professional dress for both) — this is a hard requirement from the project owner, not a style suggestion. It applies **only** to images where a person is actually visible/identifiable (a face, or a clearly-gendered figure) — it does **not** apply to object/hands-only shots (a controller, a keyboard, a robot hand, a coffee machine), silhouettes too distant/blurred to read, or screens/UI mockups with no people in them. Concretely:
+- Before picking *any* Unsplash candidate that includes a person, check whether they visibly read as Muslim per the above — if not, keep searching (add terms like "hijab", "muslim", "modest" to the query) rather than accepting a generic Western stock-photo default.
+- This is a **retroactive audit requirement too**: any existing image on the site that shows a non-Muslim-presenting identifiable person needs to be swapped when you touch that screen, even if it was already "verified" under the older, more generic modesty rule in the bullets above. The older rule (screen out revealing clothing/alcohol/club styling) still applies on top of this one, not instead of it.
+- Still verify every replacement candidate through the normal process in this section (real search, reject `plus.unsplash.com`, curl 200, actually look at the downloaded image) — don't relax the sourcing rigor just because the search terms are more specific now.
+- Free-tier Unsplash results for "Muslim + [scenario]" searches skew heavily toward single-subject portraits; multi-person group photos where *every* visible face reads as Muslim are hard to find free (most mix one hijab-wearing subject with others who aren't, which doesn't satisfy this rule for a group shot). When that happens, prefer a fully-compliant photo that's a slightly looser concept match over a tighter concept match that only partially complies — compliance isn't negotiable, concept-tightness is.
+
+**Already re-audited and swapped under this rule (2026-09-21)** — don't re-do these unless replacing them again for some other reason: Login brand-pane photo (`photo-1654533569144-f15fde124fb2`), and 2 product tiles — `hybridCourse` (`photo-1615472096167-e2efc2f25dcd`), `inPersonCourse` (`photo-1730359298000-047b9f9f9467`), `presentations` (`photo-1659080556578-0d37c8aeb64a`). The Landing hero went through several iterations before landing on `photo-1767449280971-46e438b1ce4a` — an actual **app-mockup photo** (two phone screens showing a real educational app's lesson list + lesson content screen, presented in a portfolio/case-study style) with **no photographed people at all** (illustrated characters only), which the owner confirmed finally reads as "digital learning product development." The lesson learned across the iterations: a generic hands-sketching-wireframes photo (tried first) reads as "app design" in general, not specifically *learning* — for a hero image whose whole job is to signal "we build digital learning products," prefer a photo where the screen content itself is unambiguously educational (a lesson list, course cards, a video/article lesson screen) over a generic-app-anything mockup or sketch. This also sidesteps the representation rule entirely, same as any object/hands-only shot — illustrated app-mockup content isn't a photographed person. The other 5 product tiles (`onlineCourse`, `games`, `trainingVideos`, `simulations`, `eLearning`) were left as-is — they're hands/object-only shots with no identifiable face, so the rule doesn't apply to them.
+
+## 18. Tech stack & conventions
+
+**Hand-authored HTML/CSS/JS. No TypeScript, no JSX, no npm build step, no React/Vite/any framework.** This was a deliberate architecture change (2026-09-21, hosting/deploy constraint) from an earlier React+TS+Vite build — don't reintroduce a bundler, transpiler, or component framework.
+
+- **Multi-page site, two levels deep**: `index.html` (Landing) is the only page at the project root — every other page lives in `pages/` (login, accessibility statement, and the full internal Workspace — dashboards, Projects, Leads, Clients, Billing, Team, Client Portal, Settings — all reachable from the role-appropriate sidebar once inside the Workspace, even though nothing redirects there after a real login yet, §5). Put every new screen in `pages/`, not at the root, unless it's specifically meant to replace the site's landing entry. New screens get their own `.html` file, not a client-side route.
+  - Because of that split, asset paths (`css/…`, `js/…`, `src/…`) need `../` prefixed on every page under `pages/` but not on `index.html` — copy the exact `<link>`/`<script src>` block from an existing `pages/*.html` file rather than hand-adjusting `index.html`'s paths.
+  - Cross-page **links generated by shared JS components** (header/footer/mobile-menu/accessibility-widget — they render the same markup on every page, but "index.html" and "pages/login.html" resolve differently depending on where the current page sits) use `window.IQRAA_PATHS`, a tiny global each page sets **before** loading `translations.js`: `{ root: "", pages: "pages/" }` on `index.html`, `{ root: "../", pages: "" }` on everything under `pages/`. Inside those components: `PATHS.root + "index.html…"` for links back to the landing page, `PATHS.pages + "login.html"`/`"accessibility.html"` for links to sibling pages. A hand-authored link inside a specific page's own markup (e.g. a back-link) doesn't need this — you already know exactly where that file lives, just write the literal relative path (`../index.html` from inside `pages/`).
+- **Shared chrome via classic `<script>` includes into one global namespace**, not fetch-based partials (those break under `file://`) and not `<script type="module">`/bare `import` (same problem). Every JS file is an IIFE attaching to `window.IQRAA`, under `IQRAA.i18n`, `IQRAA.components`, `IQRAA.services`, `IQRAA.pages`, or `IQRAA.icons`. Header/Footer/mobile-menu/accessibility-widget are injected via template-string HTML into placeholder containers (`<div id="header-root"></div>` etc.) by `js/chrome.js`, called on `DOMContentLoaded`. Copy the exact `<script src="...">` order from an existing page (e.g. `index.html`) when adding a new one — it's a real dependency graph (`translations.js` → `i18n.js` → `icons.js` → components → `chrome.js` → the page's own script), not an arbitrary list.
+- **CSS is global, BEM-like, no CSS Modules.** One block name per component/page file (kebab-case, page-scoped blocks get a page prefix so nothing collides, e.g. `.landing-hero`, `.login-form-pane`, `.header__nav-link`, `.btn--primary`). `css/tokens.css` + `css/global.css` are framework-agnostic and shared by every page via `css/shared.css`; page-specific styles live in `css/pages/<page>.css`, component styles in `css/components/<component>.css`.
+- Icons: inline SVG, copied from Lucide's open-source source paths, in `js/vendor/icons.js` (`IQRAA.icons.<name>(size, opts)` returns an SVG string) — standalone reference copies also live in `src/icons/*.svg`, but the actual runtime source of truth is `icons.js` (fetching the standalone files at runtime would break under `file://`, so don't switch to that). No icon library dependency. (The one exception that used to live here, `googleG()` — a fixed 4-color, non-`currentColor` Google "G" mark — was removed 2026-09-21b along with the Login page's "Sign in with Google" button per §2/§5; don't re-add a brand-fixed-color icon like it without a concrete reason.)
+- `src/` holds static assets only (icons as reference `.svg` files, `src/images/favicon.svg`) — it is **not** application source code anymore; all real source is `css/` and `js/` plus the `.html` files at the root and in `pages/`.
+- Images (hero/product/login-panel photos) stay hotlinked to verified `images.unsplash.com` CDN URLs per §17, not downloaded into `src/images/` — that was an explicit choice to avoid duplicating/managing binary assets with no build pipeline.
+- **External integration placeholder convention**: for any third-party endpoint/credential a screen needs (webhook URL, auth provider client ID, API key) that isn't provisioned yet, declare it as a single named constant at the top of that page's script (e.g. `N8N_LEAD_WEBHOOK_URL` in `js/pages/landing.js`), default it to an empty string, and branch on it: empty → do the safe/local fallback (demo success, or a translated "not configured yet" message near the control) instead of silently failing or half-working. This means every screen stays demoable end-to-end before the real credential exists, and wiring the real one later is a one-line change with nothing else to touch. Follow this pattern for every future integration point rather than inventing a new one per screen — this includes whatever auth provider §5 eventually settles on.
+- No dead code: an earlier audit found a whole unused `sections/*` folder and an unused `Card.tsx` component sitting in the old React repo, never imported anywhere — same standard applies now; if you scaffold a `.js`/`.css` file, wire it into an `.html` page's `<script>`/`<link>` list or don't leave it behind. (The Login page's "Sign in with Google" button was itself a case of this once it went out of scope — see the note above; it and its icon/translation keys were fully removed on 2026-09-21b rather than left in place.)
+- Dev server: `npm run dev` → serves the whole directory statically on `http://localhost:3000` (no bundling, just file serving — `python -m http.server` works identically if `serve` isn't available). `package.json`/`package-lock.json`/`node_modules` at the project root exist **only** for this dev-time tooling (`oxlint` + `serve`) — none of it ships or is referenced by any `.html` page; the deployed *static site* is exactly `index.html` + `pages/` + `css/` + `js/` + `src/`. `backend/` (§19b) is a genuinely separate Node service with its own `package.json` — it has to be deployed and run independently of the static site, it's not part of this bullet's "no build step" static bundle.
 - Don't add attribution/marketing copy changes without checking both languages render sensibly (line length, RTL word order) — Arabic and Hebrew strings are rarely the same length as each other or as the original.
 
-## 11. Working style for this project (from the owner's own checklist)
+## 19. n8n / Airtable architecture
+
+- **Frontend = HTML/CSS/JS**, and it must never contain secrets or API credentials (§0, §18).
+- **Airtable = system of record** for application data — leads, clients, projects, tasks, users/roles/profile/status (but never passwords — §5).
+- **n8n = automation/integration layer.** Sensitive/write operations go through n8n webhooks rather than the frontend talking to Airtable directly.
+- Useful n8n automations for this product: notifications, Airtable updates, status changes, invoice-related automation, lead processing, project status automation, and other operational workflows — but **don't add new n8n workflows just for the sake of adding automation.** Establish a clear UI and product structure first (§3, §20); automation follows structure, not the other way around.
+- **Exception, deliberately chosen (2026-09-21g, extended 2026-09-21h)**: user creation (`pages/team.html`'s "New Team Member" form) **and Login** (`pages/login.html`) go through the same dedicated `backend/` Node/Express service instead of n8n — both tasks explicitly asked for a real backend for these two flows, not an n8n webhook; Login in particular was explicit that "n8n is NOT part of this flow." This is a *narrow, named* exception, not a reversal of the n8n-first default above — don't route other write operations through `backend/` without the same kind of explicit instruction; everything else (leads, project mutations, etc.) still follows the n8n-or-local-mock pattern already established.
+
+### 19b. Users backend (`backend/`)
+
+Built 2026-09-21g, alongside `pages/team.html`'s expanded "New Team Member" form (Full Name, Email, Role, Status, Phone, Password — `User ID`/`Created At`/`Last Login`/`Password Hash` are Airtable-managed and deliberately don't appear as form fields). **The Airtable write is live-verified, not just implemented** — a real test record (`recq6umLXuzfwx5aJ`, "IQRAA Test User") was created through the actual form-to-backend-to-Airtable path and read back independently to confirm every field, including that the password hash (not the plaintext) landed in `Password Hash`.
+
+```
+pages/team.html (js/services/users-api.js)
+  -> POST http://localhost:3001/api/users
+  -> backend/server.js: validates, bcrypt-hashes the password, calls the Airtable REST API with a server-side PAT
+  -> Airtable Users table (appFUvcg5tY2Dup8U / tblOql5BcXCNhPFIS)
+```
+
+- `backend/` is a **separate Node project** (its own `package.json`, not merged into the root `package.json`, which stays dev-tooling-only per §18) — `cd backend && npm install && cp .env.example .env` (fill in `AIRTABLE_PAT`) `&& npm start`. Full details, the exact (schema-verified) Airtable field mapping, and security notes are in `backend/README.md` — read that before touching `backend/server.js`.
+- **A real `AIRTABLE_PAT` now exists in `backend/.env`** (gitignored, provided directly by the project owner 2026-09-21g) — this is no longer a blocker. Without it, `backend/server.js` still starts (so the frontend↔backend leg is testable on its own) and `POST /api/users` returns a clear `503` naming the missing var rather than silently succeeding.
+- **Schema surprises found by testing against the real base, not guessed**: the `Role` single-select options have inconsistent leading/trailing spaces (`" Producer"`, `" Designer "`, `" QA"`, `" Instructional Designer"` all have a leading space; only `"Developer"` doesn't) — `ROLE_KEY_TO_AIRTABLE_LABEL` in `server.js` matches this exactly, don't "clean up" the spacing. `Status`'s real options are `"Active"`/`"Inactive"`, not `"Paused"` as first assumed. A `Must Change Password` field exists in Airtable (`Yes`/`No`) even though it's not a form field — every create explicitly writes `"No"` to encode the already-made "not forced on first login" decision rather than leaving it ambiguous. `User ID` is a plain empty text field, not an autonumber — Airtable doesn't populate it and neither do the pre-existing records, so `server.js` leaves it unset too rather than inventing a numbering scheme; that's an open product decision, not a bug.
+- `js/services/users-api.js` follows the exact same external-integration-placeholder convention as `N8N_LEAD_WEBHOOK_URL` (§18): one named constant (`USERS_API_BASE`, defaulted to `http://localhost:3001`), swap it for the real deployed backend URL later with no other frontend changes needed.
+- This is one of the pages in the app where a `fetch()` call to a different origin is load-bearing — `pages/team.html` (and now every Workspace page, via §19c's Login flow) is not guaranteed to work opened via `file://` the way every other screen is (§8's verification checklist), since a `file://` page calling `http://localhost:3001` is a real, documented exception, not an oversight.
+
+### 19c. Login / real session auth (`backend/` — extended 2026-09-21h)
+
+Built and **live end-to-end tested against the real backend and real Airtable**, not just implemented — see the chat report for the full 14-point test log (correct login for a teamMember and an Admin test user, wrong password rejected, an Inactive-status test user rejected, session persists across a real page reload, role-mismatch redirect, logout invalidates the session, post-logout access to a protected page redirects to Login — each verified with real HTTP requests and/or a real headless-browser page load, not just code review). `pages/login.html`'s markup/CSS were **not** touched, per that task's explicit constraint — only `js/pages/login.js`'s behavior.
+
+```
+pages/login.html (js/services/auth.js)
+  -> POST http://localhost:3001/api/auth/login {email,password}, credentials:"include"
+  -> backend/server.js: looks up Email in Airtable, checks Status==="Active",
+     bcrypt.compare()s the password against Password Hash, maps Role -> app role,
+     creates an express-session + httpOnly "iqraa.sid" cookie, PATCHes Last Login
+     (success only) -> Airtable Users table (appFUvcg5tY2Dup8U / tblOql5BcXCNhPFIS)
+  <- {user:{id,email,fullName,role}} (no hash, no PAT) -> js/pages/login.js redirects
+     by role to dashboard-admin/pm/team/client.html
+
+every Workspace page (js/workspace-chrome.js)
+  -> GET /api/auth/me, credentials:"include" -> 200 {user} or 401
+  -> 401, or session.user.role doesn't match that page's required window.IQRAA_ROLE:
+     redirect (to Login, or to the user's own dashboard) before the page's
+     protected content is ever shown (".workspace-shell" stays visibility:hidden
+     until this check passes, avoiding a flash of protected content)
+```
+
+- **Every login failure reason — unknown email, inactive Status, wrong password, an Airtable Role value that doesn't map to one of this app's 4 roles — returns the identical generic `401`.** This is deliberate, non-negotiable enumeration-proofing (a caller must never be able to tell *why* a login failed), verified live: a wrong-password attempt and an Inactive test user both produced byte-identical error bodies.
+- `ns.workspaceAuthReady` (`js/workspace-chrome.js`) is a Promise, assigned at top-level script scope before `DOMContentLoaded` fires, that resolves with the verified `{user}` session once a page's access check has passed (and never resolves if the page is redirecting away). `js/pages/projects.js`, `project-workspace.js` and `settings.js` — the 3 page scripts with real role-dependent rendering logic — consume it via `.then()` instead of a bare `DOMContentLoaded` listener; every other page script doesn't need the resolved role and is untouched.
+- **`Last Login` is a plain `date` field (no time component)** — confirmed via the Metadata API after Airtable rejected a full ISO datetime write with `INVALID_VALUE_FOR_COLUMN` during live testing. Fixed to send a bare `YYYY-MM-DD` string; re-verified live afterward.
+- `POST /api/users` (§19b) now sits behind `requireAuth` + `requireRole("admin")` — an unauthenticated or non-admin caller gets `401`/`403` respectively (both verified live), closing the "no auth of its own" gap §19b originally flagged. `js/services/users-api.js` sends `credentials:"include"` accordingly.
+- CORS is locked to one specific origin (`FRONTEND_ORIGIN` env var, default `http://localhost:3000`) with `credentials:true` — required for the session cookie to travel on cross-origin requests; a wildcard origin can't be combined with credentialed CORS.
+- Google OAuth is untouched by this work — it remains the separate, still-unconfigured placeholder button on the Login page described in §5/§18, unrelated to this email+password-against-Airtable flow.
+- Full endpoint contract, env vars, and security notes: `backend/README.md`.
+
+## 20. Working style for this project (from the owner's own checklist)
 
 > "משימה אחת בכל פעם → בדיקה → אישור → משימה הבאה."
 
-One task at a time, verify it (§8), then move on. Don't pre-build later phases (§1) speculatively.
+One task at a time, verify it (§16), then move on. Don't pre-build later phases (§3) speculatively.

@@ -1,0 +1,116 @@
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 900;
+  background: rgba(248, 247, 251, 0.96);
+  border-bottom: 1px solid var(--border);
+}
+
+.header__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  height: var(--header-height);
+}
+
+.header__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  text-decoration: none;
+  color: var(--text);
+}
+
+.header__brand-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.header__brand-names {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.header__brand-company {
+  font-weight: 800;
+  font-size: 1rem;
+  letter-spacing: 0.01em;
+}
+
+.header__brand-product {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.header__nav {
+  display: none;
+}
+
+.header__nav-list {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.header__nav-link {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-decoration: none;
+  padding: var(--space-2) 0;
+  transition: color var(--transition-fast);
+}
+
+.header__nav-link:hover {
+  color: var(--text);
+}
+
+.header__actions {
+  display: none;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.header__menu-button {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text);
+  transition: background-color var(--transition-fast);
+}
+
+.header__menu-button:hover {
+  background: var(--surface-hover);
+}
+
+@media (min-width: 900px) {
+  .header__nav {
+    display: block;
+  }
+
+  .header__actions {
+    display: flex;
+  }
+
+  .header__menu-button {
+    display: none;
+  }
+}

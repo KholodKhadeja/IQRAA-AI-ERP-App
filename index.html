@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="src/images/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
@@ -10,51 +10,276 @@
     />
     <meta name="color-scheme" content="light" />
     <title>IQRAA Digital Learning | AI Learning Operations ERP</title>
-    <style>
-      #app-preloader {
-        position: fixed;
-        inset: 0;
-        z-index: 9999;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 14px;
-        background: #f8f7fb;
-      }
-      .app-preloader-mark {
-        width: 44px;
-        height: 44px;
-        border: 4px solid #e7e3ef;
-        border-top-color: #6c5ce7;
-        border-radius: 50%;
-        animation: app-preloader-spin 0.8s linear infinite;
-      }
-      .app-preloader-label {
-        font-family: "Assistant", "Arial", sans-serif;
-        font-size: 15px;
-        font-weight: 700;
-        color: #201d2b;
-      }
-      @keyframes app-preloader-spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .app-preloader-mark {
-          animation-duration: 1.6s;
-        }
-      }
-    </style>
+    <link rel="stylesheet" href="css/shared.css" />
+    <link rel="stylesheet" href="css/pages/landing.css" />
   </head>
   <body>
-    <div id="root">
-      <div id="app-preloader" role="status" aria-live="polite">
-        <span class="app-preloader-mark" aria-hidden="true"></span>
-        <span class="app-preloader-label">IQRAA Digital Learning</span>
-      </div>
-    </div>
-    <script type="module" src="/src/main.tsx"></script>
+    <div id="header-root"></div>
+    <a href="#main-content" class="skip-link" data-i18n="meta.skipLink"></a>
+
+    <main id="main-content">
+      <section class="landing-hero" aria-labelledby="hero-title">
+        <div class="container landing-hero-grid">
+          <div class="landing-hero-copy">
+            <span class="landing-kicker" id="hero-kicker-icon-slot"></span>
+            <h1 id="hero-title">
+              <span data-i18n="hero.titleLine1"></span><br />
+              <em data-i18n="hero.titleEm"></em>
+            </h1>
+            <p data-i18n="hero.paragraph"></p>
+            <div class="landing-hero-actions">
+              <a href="#contact" class="btn btn--primary" id="hero-cta"></a>
+            </div>
+            <ul class="landing-hero-highlights">
+              <li><span class="hl-icon"></span><span data-i18n="hero.highlights.0"></span></li>
+              <li><span class="hl-icon"></span><span data-i18n="hero.highlights.1"></span></li>
+              <li><span class="hl-icon"></span><span data-i18n="hero.highlights.2"></span></li>
+            </ul>
+          </div>
+          <div class="landing-hero-visual">
+            <div class="landing-hero-visual__frame">
+              <img
+                src="https://images.unsplash.com/photo-1767449280971-46e438b1ce4a?auto=format&fit=crop&w=1600&q=85"
+                data-i18n-attr="alt:hero.imageAlt"
+                alt=""
+              />
+            </div>
+            <div class="landing-hero-caption">
+              <span data-i18n="hero.captionLabel"></span>
+              <strong data-i18n="hero.captionStrong"></strong>
+            </div>
+            <span class="landing-hero-stamp">01 / 05</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="container landing-products-section" id="services" aria-labelledby="products-title">
+        <div class="landing-products-layout">
+          <div class="landing-section-intro">
+            <span class="landing-section-number">01</span>
+            <p class="landing-kicker" data-i18n="products.kicker"></p>
+            <h2 id="products-title">
+              <span data-i18n="products.titleLine1"></span><br />
+              <em data-i18n="products.titleEm"></em>
+            </h2>
+            <p data-i18n="products.paragraph"></p>
+          </div>
+          <div class="landing-products-mosaic" id="products-mosaic"></div>
+        </div>
+      </section>
+
+      <section class="landing-workflow-section" id="process" aria-labelledby="workflow-title">
+        <div class="container landing-workflow-layout">
+          <div class="landing-workflow-intro">
+            <span class="landing-section-number">02</span>
+            <p class="landing-kicker" data-i18n="workflow.kicker"></p>
+            <h2 id="workflow-title">
+              <span data-i18n="workflow.titleLine1"></span><br />
+              <em data-i18n="workflow.titleEm"></em>
+            </h2>
+            <p data-i18n="workflow.paragraph"></p>
+          </div>
+          <ol class="landing-timeline" id="workflow-timeline"></ol>
+        </div>
+      </section>
+
+      <section class="landing-erp-section" aria-labelledby="erp-title">
+        <div class="container landing-erp-grid">
+          <div>
+            <span class="landing-section-number">03</span>
+            <p class="landing-kicker" data-i18n="erp.kicker"></p>
+            <h2 id="erp-title">
+              <span data-i18n="erp.titleLine1"></span><br />
+              <em data-i18n="erp.titleEm"></em>
+            </h2>
+            <p data-i18n="erp.paragraph"></p>
+            <a href="pages/login.html" class="btn btn--primary" data-i18n="erp.cta"></a>
+          </div>
+          <div class="landing-erp-mockup" data-i18n-attr="aria-label:erp.mockupAriaLabel">
+            <div class="landing-mockup-top">
+              <span data-i18n="erp.projectsBoard"></span>
+              <span class="landing-mockup-dot"></span>
+            </div>
+            <div class="landing-mockup-body">
+              <div class="landing-mockup-sidebar">
+                <span></span><span></span><span></span><span></span>
+              </div>
+              <div class="landing-mockup-content">
+                <div class="landing-mockup-heading">
+                  <b data-i18n="erp.activeProjects"></b>
+                  <i></i>
+                </div>
+                <div class="landing-mockup-columns">
+                  <span></span><span></span><span></span>
+                </div>
+                <div class="landing-mockup-rows">
+                  <span></span><span></span><span></span><span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="container landing-contact-section" id="contact" aria-labelledby="contact-title">
+        <div class="landing-contact-copy">
+          <span class="landing-section-number">04</span>
+          <p class="landing-kicker" data-i18n="contact.kicker"></p>
+          <h2 id="contact-title">
+            <span data-i18n="contact.titleLine1"></span><br />
+            <em data-i18n="contact.titleEm"></em>
+          </h2>
+          <p data-i18n="contact.paragraph"></p>
+          <div class="landing-contact-details">
+            <a href="mailto:iqraadigitallearning@gmail.com" id="contact-mail-link">iqraadigitallearning@gmail.com</a>
+            <a href="tel:+972000000000" id="contact-phone-link">03־0000000</a>
+          </div>
+        </div>
+        <form class="landing-contact-form" id="contact-form" novalidate>
+          <div id="contact-form-fields">
+            <div class="landing-form-row">
+              <div class="text-field">
+                <label for="contact-name" class="text-field__label">
+                  <span data-i18n="contact.nameLabel"></span><span class="text-field__required" aria-hidden="true">*</span>
+                </label>
+                <div class="text-field__input-wrap">
+                  <input id="contact-name" name="name" type="text" class="text-field__input" required />
+                </div>
+                <span id="contact-name-error" class="text-field__error" role="alert" hidden></span>
+              </div>
+              <div class="text-field">
+                <label for="contact-organization" class="text-field__label">
+                  <span data-i18n="contact.orgLabel"></span><span class="text-field__required" aria-hidden="true">*</span>
+                </label>
+                <div class="text-field__input-wrap">
+                  <input id="contact-organization" name="organization" type="text" class="text-field__input" required />
+                </div>
+                <span id="contact-organization-error" class="text-field__error" role="alert" hidden></span>
+              </div>
+            </div>
+            <div class="landing-form-row">
+              <div class="text-field">
+                <label for="contact-email" class="text-field__label">
+                  <span data-i18n="contact.emailLabel"></span><span class="text-field__required" aria-hidden="true">*</span>
+                </label>
+                <div class="text-field__input-wrap">
+                  <input id="contact-email" name="email" type="email" class="text-field__input" required />
+                </div>
+                <span id="contact-email-error" class="text-field__error" role="alert" hidden></span>
+              </div>
+              <div class="text-field">
+                <label for="contact-phone" class="text-field__label">
+                  <span data-i18n="contact.phoneLabel"></span><span class="text-field__required" aria-hidden="true">*</span>
+                </label>
+                <div class="text-field__input-wrap">
+                  <input id="contact-phone" name="phone" type="tel" class="text-field__input" required />
+                </div>
+                <span id="contact-phone-error" class="text-field__error" role="alert" hidden></span>
+              </div>
+            </div>
+            <label class="landing-textarea-label">
+              <span data-i18n="contact.messageLabel"></span>
+              <textarea id="contact-message" name="message" rows="4"></textarea>
+            </label>
+            <div class="landing-form-error" role="alert" id="contact-submit-error" hidden>
+              <span data-i18n="contact.submitError"></span>
+            </div>
+            <button class="landing-submit-button" type="submit" id="contact-submit">
+              <span data-i18n="contact.submit"></span>
+            </button>
+          </div>
+          <div class="landing-success-message" role="status" id="contact-success" hidden>
+            <h3 data-i18n="contact.successTitle"></h3>
+            <p data-i18n="contact.successText"></p>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <div id="footer-root"></div>
+    <div id="a11y-widget-root"></div>
+
+    <script>window.IQRAA_PATHS = { root: "", pages: "pages/" };</script>
+    <script src="js/i18n/translations.js"></script>
+    <script src="js/i18n/i18n.js"></script>
+    <script src="js/vendor/icons.js"></script>
+    <script src="js/components/text-field.js"></script>
+    <script src="js/components/language-toggle.js"></script>
+    <script src="js/components/mobile-menu.js"></script>
+    <script src="js/components/header.js"></script>
+    <script src="js/components/footer.js"></script>
+    <script src="js/components/accessibility-widget.js"></script>
+    <script src="js/chrome.js"></script>
+    <script src="js/pages/landing.js"></script>
+    <script>
+      (function () {
+        var ns = window.IQRAA;
+
+        document.getElementById("hero-kicker-icon-slot").innerHTML =
+          ns.icons.sparkles(16) + '<span data-i18n="hero.kicker"></span>';
+
+        document.getElementById("hero-cta").innerHTML =
+          '<span data-i18n="hero.cta"></span>' + ns.icons.arrowLeft(18);
+
+        document.querySelectorAll(".landing-hero-highlights .hl-icon").forEach(function (el) {
+          el.innerHTML = ns.icons.check(16);
+        });
+
+        document.getElementById("contact-mail-link").innerHTML =
+          ns.icons.mail(18) + " iqraadigitallearning@gmail.com";
+        document.getElementById("contact-phone-link").innerHTML =
+          ns.icons.phone(18) + " 03־0000000";
+
+        document.getElementById("contact-submit-error").innerHTML =
+          ns.icons.alertCircle(16) + '<span data-i18n="contact.submitError"></span>';
+
+        document.getElementById("contact-submit").innerHTML =
+          '<span data-i18n="contact.submit"></span>' + ns.icons.arrowLeft(18);
+
+        document.getElementById("contact-success").querySelector("h3").before(
+          (function () {
+            var wrap = document.createElement("div");
+            wrap.innerHTML = ns.icons.check(28);
+            return wrap.firstChild;
+          })()
+        );
+
+        var PRODUCT_IMAGES = [
+          { key: "onlineCourse", image: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=700&q=80" },
+          { key: "inPersonCourse", image: "https://images.unsplash.com/photo-1730359298000-047b9f9f9467?auto=format&fit=crop&w=700&q=80" },
+          { key: "hybridCourse", image: "https://images.unsplash.com/photo-1615472096167-e2efc2f25dcd?auto=format&fit=crop&w=700&q=80" },
+          { key: "games", image: "https://images.unsplash.com/photo-1493711662062-fa541adb3fc8?auto=format&fit=crop&w=700&q=80" },
+          { key: "trainingVideos", image: "https://images.unsplash.com/photo-1478720568477-152d9b164e26?auto=format&fit=crop&w=700&q=80" },
+          { key: "simulations", image: "https://images.unsplash.com/photo-1531746790731-6c087fecd65a?auto=format&fit=crop&w=700&q=80" },
+          { key: "presentations", image: "https://images.unsplash.com/photo-1659080556578-0d37c8aeb64a?auto=format&fit=crop&w=700&q=80" },
+          { key: "eLearning", image: "https://images.unsplash.com/photo-1765894359240-49b82f93b91a?auto=format&fit=crop&w=700&q=80" }
+        ];
+        document.getElementById("products-mosaic").innerHTML = PRODUCT_IMAGES.map(function (product) {
+          return (
+            '<div class="landing-product-tile" style="background-image:url(' + product.image + ')">' +
+            '<span class="landing-product-tile-overlay" aria-hidden="true"></span>' +
+            '<span class="landing-product-tile-badge">' + ns.icons.sparkles(12) +
+            '<span data-i18n="products.badge"></span></span>' +
+            '<h3 data-i18n="products.items.' + product.key + '"></h3>' +
+            "</div>"
+          );
+        }).join("");
+
+        var WORKFLOW_NUMBERS = ["01", "02", "03", "04", "05"];
+        document.getElementById("workflow-timeline").innerHTML = WORKFLOW_NUMBERS.map(function (num, index) {
+          return (
+            "<li>" +
+            '<span class="landing-timeline-number">' + num + "</span>" +
+            '<div class="landing-timeline-line">' + (index < 4 ? "<span></span>" : "") + "</div>" +
+            "<div>" +
+            '<h3 data-i18n="workflow.steps.' + index + '.title"></h3>' +
+            '<p data-i18n="workflow.steps.' + index + '.description"></p>' +
+            "</div></li>"
+          );
+        }).join("");
+
+        ns.i18n.translatePage();
+      })();
+    </script>
   </body>
 </html>

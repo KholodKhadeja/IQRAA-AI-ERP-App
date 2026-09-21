@@ -1,0 +1,161 @@
+/* Internal Workspace sidebar. Mobile: full-screen overlay + sliding-in
+   panel, same technique as .mobile-menu-overlay (css/components/mobile-menu.css)
+   — a fixed backdrop that's display:none until .is-open, not a transform,
+   so it reuses an already-proven pattern instead of a new one.
+   Desktop (>= 960px): a static right-hand column, fixed width via
+   --sidebar-width, always visible. Right-hand placement comes from DOM
+   order (#sidebar-root is the first child of .workspace-shell) combined
+   with the fixed dir="rtl" on <html> — see CLAUDE.md §12/§9. */
+
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay);
+  z-index: 1100;
+  display: none;
+  /* flex-start = the RTL main-start edge = the right side of the screen,
+     matching the sidebar's right-side desktop identity (CLAUDE.md §9) and
+     the workspace-header hamburger button, which is the first child of
+     .workspace-header__inner (so it renders on the right in RTL too) —
+     button and panel must open on the same side. Do not copy
+     .mobile-menu-overlay's flex-end here: that component's own hamburger
+     button is the LAST child of .header__inner, so left-side flex-end is
+     correct there but wrong for this one. */
+  justify-content: flex-start;
+}
+
+.sidebar-overlay.is-open {
+  display: flex;
+}
+
+.sidebar {
+  width: min(280px, 85vw);
+  height: 100%;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-lg);
+  overflow-y: auto;
+}
+
+.sidebar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar__brand-names {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.sidebar__brand-company {
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+
+.sidebar__brand-product {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.sidebar__close {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text);
+  transition: background-color var(--transition-fast);
+}
+
+.sidebar__close:hover {
+  background: var(--surface-hover);
+}
+
+.sidebar__nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+}
+
+.sidebar__nav-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  text-align: start;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.sidebar__nav-link:hover {
+  background: var(--surface-hover);
+}
+
+.sidebar__nav-link--current {
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+}
+
+.sidebar__nav-link--disabled {
+  color: var(--text-secondary);
+  cursor: not-allowed;
+}
+
+.sidebar__nav-link--disabled:hover {
+  background: none;
+}
+
+.sidebar__soon-badge {
+  margin-inline-start: auto;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-full);
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+  font-size: 0.65rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+@media (min-width: 960px) {
+  .sidebar-overlay {
+    position: static;
+    display: block;
+    background: none;
+  }
+
+  .sidebar {
+    width: var(--sidebar-width);
+    height: auto;
+    min-height: 100vh;
+    box-shadow: none;
+    border-inline-start: 1px solid var(--border);
+  }
+
+  .sidebar__close {
+    display: none;
+  }
+}

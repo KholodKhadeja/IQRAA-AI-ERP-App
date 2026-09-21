@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="../src/images/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <title>IQRAA Digital Learning | AI Learning Operations ERP</title>
+    <link rel="stylesheet" href="../css/shared.css" />
+    <link rel="stylesheet" href="../css/pages/workspace.css" />
+    <link rel="stylesheet" href="../css/pages/project-workspace.css" />
+  </head>
+  <body>
+    <div class="workspace-shell">
+      <div id="sidebar-root"></div>
+      <div class="workspace-shell__body">
+        <div id="workspace-header-root"></div>
+        <main id="main-content" class="workspace-main workspace-main--project-workspace">
+          <div class="project-workspace">
+            <a href="projects.html" class="project-workspace__back" id="project-workspace-back">
+              <span data-i18n="projectWorkspace.backLink"></span>
+            </a>
+            <div id="project-workspace-content"></div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <div id="a11y-widget-root"></div>
+    <div id="modal-root"></div>
+
+    <script>
+      window.IQRAA_PATHS = { root: "../", pages: "" };
+    </script>
+    <script src="../js/i18n/translations.js"></script>
+    <script src="../js/i18n/i18n.js"></script>
+    <script src="../js/vendor/icons.js"></script>
+    <script src="../js/components/language-toggle.js"></script>
+    <script src="../js/components/sidebar.js"></script>
+    <script src="../js/components/workspace-header.js"></script>
+    <script src="../js/components/accessibility-widget.js"></script>
+    <script src="../js/components/modal.js"></script>
+    <script src="../js/services/auth.js"></script>
+    <script src="../js/data/mock-data.js"></script>
+    <script src="../js/services/project-helpers.js"></script>
+    <script>
+      (function () {
+        var params = new URLSearchParams(window.location.search);
+        var requestedId = params.get("id");
+        var project = null;
+        if (requestedId) {
+          project = window.IQRAA.data.projects.filter(function (p) {
+            return p.id === requestedId;
+          })[0] || null;
+        } else {
+          project = window.IQRAA.data.projects[0] || null;
+        }
+        window.IQRAA_CURRENT_PROJECT_ID = project ? project.id : null;
+        window.IQRAA_PAGE_TITLE_TEXT = project ? project.name : window.IQRAA.i18n.t("projectWorkspace.notFoundHeading");
+      })();
+    </script>
+    <script src="../js/workspace-chrome.js"></script>
+    <script src="../js/pages/project-workspace.js"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        document.getElementById("project-workspace-back").innerHTML =
+          IQRAA.icons.arrowLeft(16) + document.getElementById("project-workspace-back").innerHTML;
+      });
+    </script>
+  </body>
+</html>

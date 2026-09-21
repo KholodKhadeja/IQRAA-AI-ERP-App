@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="../src/images/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <title>IQRAA Digital Learning | AI Learning Operations ERP</title>
+    <link rel="stylesheet" href="../css/shared.css" />
+    <link rel="stylesheet" href="../css/pages/workspace.css" />
+    <link rel="stylesheet" href="../css/pages/dashboard-admin.css" />
+  </head>
+  <body>
+    <div class="workspace-shell">
+      <div id="sidebar-root"></div>
+      <div class="workspace-shell__body">
+        <div id="workspace-header-root"></div>
+        <main id="main-content" class="workspace-main workspace-main--admin-overview">
+          <div class="admin-overview">
+            <div class="kpi-grid" id="admin-kpi-grid"></div>
+
+            <section class="panel" aria-labelledby="admin-active-projects-heading">
+              <div class="panel__header">
+                <h2 class="panel__title" id="admin-active-projects-heading" data-i18n="adminOverview.sectionActiveProjects"></h2>
+                <a class="panel__link" href="projects.html" data-i18n="adminOverview.viewAllProjects"></a>
+              </div>
+              <div class="admin-overview__table-wrap" id="admin-active-projects-body"></div>
+            </section>
+
+            <section class="panel" aria-labelledby="admin-stage-heading">
+              <div class="panel__header">
+                <h2 class="panel__title" id="admin-stage-heading" data-i18n="adminOverview.sectionProjectsByStage"></h2>
+              </div>
+              <div id="admin-stage-summary"></div>
+            </section>
+
+            <section class="panel" aria-labelledby="admin-ready-heading">
+              <div class="panel__header">
+                <h2 class="panel__title" id="admin-ready-heading" data-i18n="adminOverview.sectionReadyToStart"></h2>
+              </div>
+              <div class="admin-overview__table-wrap" id="admin-ready-to-start-body"></div>
+            </section>
+
+            <section class="panel" aria-labelledby="admin-workload-heading">
+              <div class="panel__header">
+                <h2 class="panel__title" id="admin-workload-heading" data-i18n="adminOverview.sectionPmWorkload"></h2>
+              </div>
+              <div id="admin-pm-workload-list"></div>
+            </section>
+
+            <section class="panel" aria-labelledby="admin-activity-heading">
+              <div class="panel__header">
+                <h2 class="panel__title" id="admin-activity-heading" data-i18n="adminOverview.sectionRecentActivity"></h2>
+              </div>
+              <div id="admin-activity-list"></div>
+            </section>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <div id="a11y-widget-root"></div>
+
+    <script>
+      window.IQRAA_PATHS = { root: "../", pages: "" };
+      window.IQRAA_ROLE = "admin";
+      window.IQRAA_PAGE_TITLE_KEY = "sidebar.overview";
+    </script>
+    <script src="../js/i18n/translations.js"></script>
+    <script src="../js/i18n/i18n.js"></script>
+    <script src="../js/vendor/icons.js"></script>
+    <script src="../js/components/language-toggle.js"></script>
+    <script src="../js/components/sidebar.js"></script>
+    <script src="../js/components/workspace-header.js"></script>
+    <script src="../js/components/accessibility-widget.js"></script>
+    <script src="../js/services/auth.js"></script>
+    <script src="../js/data/mock-data.js"></script>
+    <script src="../js/services/project-helpers.js"></script>
+    <script src="../js/workspace-chrome.js"></script>
+    <script src="../js/pages/dashboard-admin.js"></script>
+  </body>
+</html>

@@ -1,0 +1,86 @@
+/* Admin Overview (screens.md §6.1) AND PM Overview (screens.md §18, Step
+   7) — same KPI-grid + stacked-panels layout for both, so PM Overview
+   reuses this file directly instead of a near-duplicate stylesheet; only
+   dashboard-client.html still uses the plain centered-card layout from
+   css/pages/workspace.css. .workspace-main normally centers a single
+   placeholder card; these two pages override via a modifier class rather
+   than changing that shared default. */
+.workspace-main--admin-overview {
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+.admin-overview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  width: 100%;
+  max-width: var(--container-max);
+  margin-inline: auto;
+}
+
+.admin-overview__table-wrap {
+  overflow-x: auto;
+}
+
+.admin-overview__stage-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.admin-overview__stage-label {
+  flex: 0 0 160px;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.admin-overview__stage-bar {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-overview__stage-count {
+  flex: 0 0 24px;
+  text-align: end;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
+.admin-overview__pm-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-overview__pm-row:last-child {
+  border-bottom: 0;
+}
+
+.admin-overview__pm-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.admin-overview__pm-name {
+  font-weight: 700;
+  font-size: var(--font-size-sm);
+}
+
+.admin-overview__pm-stats {
+  display: flex;
+  gap: var(--space-4);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.admin-overview__assign-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}

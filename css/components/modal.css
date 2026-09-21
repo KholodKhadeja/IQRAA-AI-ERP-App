@@ -1,0 +1,84 @@
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay);
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5);
+}
+
+.modal-overlay[hidden] {
+  display: none;
+}
+
+.modal {
+  width: min(560px, 100%);
+  max-height: 85vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+}
+
+.modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+}
+
+.modal__title {
+  font-size: var(--font-size-lg);
+}
+
+.modal__close {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  min-width: 40px;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text);
+  flex-shrink: 0;
+  transition: background-color var(--transition-fast);
+}
+
+.modal__close:hover {
+  background: var(--surface-hover);
+}
+
+.modal__body {
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* Field rows inside a modal body reuse the shared .field-row (css/
+   components/data-display.css) rather than a modal-scoped duplicate. */
+
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+}
+
+/* Used outside an actual modal too (Client Project View's approval/
+   feedback actions) where actions should sit at the form's start edge
+   instead of the modal-dialog convention of trailing/end-aligned. */
+.modal__actions--start {
+  justify-content: flex-start;
+}

@@ -1,0 +1,39 @@
+/* Shared layout for every searchable/filterable record list in the
+   Workspace — Projects List, Leads, Clients (screens.md §7/§8/§9). Was
+   page-specific (css/pages/projects.css) until Leads/Clients needed the
+   identical toolbar+panel shape — see CLAUDE.md §9. */
+.workspace-main--list-page {
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+.list-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  width: 100%;
+  max-width: var(--container-max);
+  margin-inline: auto;
+}
+
+.list-page__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.list-page__search {
+  flex: 1;
+  min-width: 220px;
+}
+
+.list-page__filters {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.list-page__toolbar .btn {
+  margin-inline-start: auto;
+}
