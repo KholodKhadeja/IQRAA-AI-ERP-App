@@ -1,22 +1,41 @@
-/* Team Management (screens.md §20). Active-project/active-task counts are
-   derived from data.projects/data.tasks at render time (same principle as
-   PM Workload in Admin Overview — CLAUDE.md §10), never typed in. Pause/
-   reactivate mutates data.teamMembers in place and re-renders, the same
-   real-in-memory-mutation pattern as "assign PM" and "quick status
-   update" elsewhere — that stays true for the LOCAL table view.
+/* Team Management (screens.md §20).
 
-   Create is different (2026-09-21g): the "New Team Member" form now
+   2026-09-22 "Connect Team pages to Airtable": this list now renders
+   real records from js/services/users-api.js's getTeamMembers() (GET
+   /api/users/team on the existing backend, which reads the Airtable
+   Users table) instead of js/data/mock-data.js's data.teamMembers. A
+   fresh fetch runs every time this page loads — see loadTeamMembers()
+   below — so editing a user's Role/Status/Phone directly in Airtable and
+   reloading this page reflects the change, same pattern as
+   js/pages/projects.js/leads.js. The backend already filters out
+   Admin/Project Manager/Client records (and blank placeholder rows) —
+   see backend/server.js's Team section — so every row here is a real
+   internal team member, never a client.
+
+   Active-project/active-task counts are still derived from
+   js/data/mock-data.js's data.projects/data.tasks (same principle as PM
+   Workload in Admin Overview — CLAUDE.md §10) — but since those are mock
+   records keyed by fake "tm-N" ids unrelated to real Airtable record
+   ids, they correctly show 0 for every real team member until a future
+   task wires Projects/Tasks to real Users. Not fixed here per this
+   task's explicit "don't build a new data architecture, keep it
+   incremental" instruction.
+
+   Create is unchanged (2026-09-21g): the "New Team Member" form still
    collects Full Name / Email / Role / Status / Phone / Password and
    submits them to the real Users backend (js/services/users-api.js ->
-   backend/server.js -> Airtable), not just a local push into
-   data.teamMembers. User ID / Created At / Last Login / Password Hash are
-   Airtable-managed fields and deliberately do NOT appear in this form —
-   the backend hashes the password and Airtable auto-populates the rest.
-   On success, the record the backend returns is merged into the local
-   list so it shows up immediately without a full page reload. Remove
-   isn't implemented here: a destructive action needs a confirmation flow
-   this project has no precedent for yet, so it's left out rather than
-   wired to a bare native confirm() with no design behind it. */
+   backend/server.js -> Airtable). On success, the record the backend
+   returns is merged into the local list so it shows up immediately
+   without a full page reload. Remove isn't implemented here: a
+   destructive action needs a confirmation flow this project has no
+   precedent for yet, so it's left out rather than wired to a bare native
+   confirm() with no design behind it.
+
+   The pause/reactivate toggle remains local-only (never persisted to
+   Airtable, same as before this task — there is no PATCH /api/users/:id
+   endpoint, and building one is out of this task's scope) but now uses
+   the real Active/Inactive vocabulary instead of the old, non-existent
+   "Paused" Airtable option. */
 window.IQRAA = window.IQRAA || {};
 
 (function (ns) {
@@ -24,20 +43,17 @@ window.IQRAA = window.IQRAA || {};
     var data = ns.data;
     var ph = ns.services.projectHelpers;
     var usersApi = ns.services.usersApi;
-    if (!data || !ph) return;
+    if (!data || !ph || !usersApi) return;
 
     var EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    var STATUS_TONE = { active: "success", paused: "neutral" };
+    var PLACEHOLDER = "—";
+    var STATUS_TONE = { active: "success", inactive: "neutral" };
     var ROLE_KEYS = ["teamRole.producer", "teamRole.designer", "teamRole.instructionalDesigner", "teamRole.qa", "teamRole.developer"];
     /* Airtable single-select values for the Status field — confirmed live
-       2026-09-21g against the real Users table schema. Note this is
-       "Active"/"Inactive", NOT "Active"/"Paused" — the existing local
-       pause/reactivate toggle on the table below uses "paused" as its own
-       separate, Airtable-unconnected UI concept (see renderTable() /
-       STATUS_TONE above) and is deliberately left as-is; only the create
-       form below needs to match Airtable's real option values exactly. */
+       2026-09-21g against the real Users table schema: "Active"/"Inactive". */
     var STATUS_VALUES = ["Active", "Inactive"];
-    var nextId = data.teamMembers.length + 1;
+
+    var allTeamMembers = [];
 
     function activeProjectCount(memberId) {
       return ph.projectsForTeamMember(memberId).filter(function (p) {
@@ -51,8 +67,39 @@ window.IQRAA = window.IQRAA || {};
       }).length;
     }
 
+    function renderLoading() {
+      document.getElementById("team-list-body").innerHTML =
+        '<p class="panel__empty"><span class="btn__spinner" aria-hidden="true">' + ns.icons.loader2(16) + "</span> " +
+        ns.i18n.t("team.loading") +
+        "</p>";
+    }
+
+    function renderError() {
+      document.getElementById("team-list-body").innerHTML =
+        '<div class="panel__empty">' +
+        "<p>" + ns.i18n.t("team.loadError") + "</p>" +
+        '<button type="button" class="btn btn--secondary" id="team-retry-btn">' + ns.i18n.t("team.retry") + "</button>" +
+        "</div>";
+      var retryBtn = document.getElementById("team-retry-btn");
+      if (retryBtn) retryBtn.addEventListener("click", loadTeamMembers);
+    }
+
+    function openMemberDetails(member) {
+      var statusLabel = ns.i18n.t("team.status" + (member.status === "active" ? "Active" : "Inactive"));
+      var body =
+        ph.fieldRow("team.roleLabel", ns.i18n.t(member.role)) +
+        ph.fieldRow("projectFields.status", ph.badge(statusLabel, STATUS_TONE[member.status])) +
+        ph.fieldRow("settings.emailLabel", member.email || PLACEHOLDER) +
+        ph.fieldRow("leadFields.phone", member.phone || PLACEHOLDER);
+      ns.components.modal.open(member.fullName || PLACEHOLDER, body);
+    }
+
     function renderTable() {
       var host = document.getElementById("team-list-body");
+      if (allTeamMembers.length === 0) {
+        host.innerHTML = '<p class="panel__empty">' + ns.i18n.t("team.emptyResults") + "</p>";
+        return;
+      }
       var head =
         "<tr>" +
         "<th>" + ns.i18n.t("team.fullNameLabel") + "</th>" +
@@ -62,14 +109,14 @@ window.IQRAA = window.IQRAA || {};
         "<th>" + ns.i18n.t("team.activeTasksLabel") + "</th>" +
         "<th></th>" +
         "</tr>";
-      var rows = data.teamMembers
+      var rows = allTeamMembers
         .map(function (member) {
-          var statusLabel = ns.i18n.t("team.status" + (member.status === "active" ? "Active" : "Paused"));
+          var statusLabel = ns.i18n.t("team.status" + (member.status === "active" ? "Active" : "Inactive"));
           var actionLabel = ns.i18n.t(member.status === "active" ? "team.pauseAction" : "team.reactivateAction");
           return (
             "<tr>" +
-            '<td data-label="' + ns.i18n.t("team.fullNameLabel") + '">' + member.name + "</td>" +
-            '<td data-label="' + ns.i18n.t("team.roleLabel") + '">' + ns.i18n.t(member.roleKey) + "</td>" +
+            '<td data-label="' + ns.i18n.t("team.fullNameLabel") + '"><button type="button" class="data-table__primary" data-member-open="' + member.id + '">' + (member.fullName || PLACEHOLDER) + "</button></td>" +
+            '<td data-label="' + ns.i18n.t("team.roleLabel") + '">' + ns.i18n.t(member.role) + "</td>" +
             '<td data-label="' + ns.i18n.t("projectFields.status") + '">' + ph.badge(statusLabel, STATUS_TONE[member.status]) + "</td>" +
             '<td data-label="' + ns.i18n.t("clientFields.activeProjects") + '">' + activeProjectCount(member.id) + "</td>" +
             '<td data-label="' + ns.i18n.t("team.activeTasksLabel") + '">' + activeTaskCount(member.id) + "</td>" +
@@ -80,16 +127,39 @@ window.IQRAA = window.IQRAA || {};
         .join("");
       host.innerHTML = '<table class="data-table"><thead>' + head + "</thead><tbody>" + rows + "</tbody></table>";
 
+      host.querySelectorAll("[data-member-open]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var member = allTeamMembers.filter(function (m) {
+            return m.id === btn.getAttribute("data-member-open");
+          })[0];
+          if (member) openMemberDetails(member);
+        });
+      });
+
       host.querySelectorAll("[data-toggle-status]").forEach(function (btn) {
         btn.addEventListener("click", function () {
-          var member = data.teamMembers.filter(function (m) {
+          var member = allTeamMembers.filter(function (m) {
             return m.id === btn.getAttribute("data-toggle-status");
           })[0];
           if (!member) return;
-          member.status = member.status === "active" ? "paused" : "active";
+          member.status = member.status === "active" ? "inactive" : "active";
           renderTable();
         });
       });
+    }
+
+    function loadTeamMembers() {
+      renderLoading();
+      usersApi
+        .getTeamMembers()
+        .then(function (teamMembers) {
+          allTeamMembers = teamMembers;
+          renderTable();
+        })
+        .catch(function (err) {
+          console.error("[team] Failed to load team members from the backend:", err);
+          renderError();
+        });
     }
 
     function openCreateForm() {
@@ -188,11 +258,13 @@ window.IQRAA = window.IQRAA || {};
             password: passwordInput.value
           })
           .then(function (created) {
-            data.teamMembers.push({
-              id: (created && created.id) || "tm-" + nextId++,
-              name: nameInput.value.trim(),
-              roleKey: roleSelect.value,
-              status: statusSelect.value === "Active" ? "active" : "paused"
+            allTeamMembers.push({
+              id: (created && created.id) || "tm-pending-" + Date.now(),
+              fullName: nameInput.value.trim(),
+              email: emailInput.value.trim(),
+              role: roleSelect.value,
+              status: statusSelect.value === "Active" ? "active" : "inactive",
+              phone: phoneInput.value.trim() || null
             });
             ns.components.modal.close();
             renderTable();
@@ -208,6 +280,6 @@ window.IQRAA = window.IQRAA || {};
 
     document.getElementById("team-create-btn").addEventListener("click", openCreateForm);
 
-    renderTable();
+    loadTeamMembers();
   });
 })(window.IQRAA);

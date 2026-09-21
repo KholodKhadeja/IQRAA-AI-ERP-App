@@ -17,12 +17,26 @@
 
    2026-09-21h: POST /api/users now requires an authenticated Admin
    session (backend/server.js's requireAuth/requireRole("admin")), so
-   this request must send the session cookie — credentials:"include". */
+   this request must send the session cookie — credentials:"include".
+
+   2026-09-22 "Connect Team pages to Airtable": added getTeamMembers()
+   for pages/team.html's list (GET /api/users/team, also
+   requireAuth/requireRole("admin") — see backend/server.js's Team
+   section). Deliberately uncached, same as js/services/projects-api.js/
+   leads-api.js: issues a fresh network request every time it's called,
+   so team.html's own loadTeamMembers() re-fetching on every page load
+   actually reflects Airtable edits instead of reusing a stale result. */
 window.IQRAA = window.IQRAA || {};
 IQRAA.services = IQRAA.services || {};
 
 IQRAA.services.usersApi = (function () {
-  var USERS_API_BASE = "http://localhost:3001";
+  /* Local dev (or file://) hits the local backend; the deployed static
+     site hits the deployed backend service (render.yaml) — see
+     js/services/auth.js for why this can't stay a plain hardcoded
+     localhost URL once the site is actually deployed. */
+  var USERS_API_BASE = /^(localhost|127\.0\.0\.1)?$/.test(window.location.hostname)
+    ? "http://localhost:3001"
+    : "https://iqraa-erp-backend.onrender.com";
 
   function createUser(payload) {
     return fetch(USERS_API_BASE + "/api/users", {
@@ -45,5 +59,23 @@ IQRAA.services.usersApi = (function () {
     });
   }
 
-  return { createUser: createUser };
+  function getTeamMembers() {
+    return fetch(USERS_API_BASE + "/api/users/team", {
+      credentials: "include"
+    }).then(function (response) {
+      return response.json().catch(function () {
+        return {};
+      }).then(function (body) {
+        if (!response.ok) {
+          var error = new Error((body && body.error) || "Request failed with status " + response.status);
+          error.status = response.status;
+          error.body = body;
+          throw error;
+        }
+        return (body && body.teamMembers) || [];
+      });
+    });
+  }
+
+  return { createUser: createUser, getTeamMembers: getTeamMembers };
 })();

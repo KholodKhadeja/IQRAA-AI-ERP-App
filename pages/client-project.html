@@ -41,22 +41,17 @@
     <script src="../js/services/auth.js"></script>
     <script src="../js/data/mock-data.js"></script>
     <script src="../js/services/project-helpers.js"></script>
+    <script src="../js/services/clients-api.js"></script>
     <script>
       (function () {
-        var params = new URLSearchParams(window.location.search);
-        var requestedId = params.get("id");
-        var myProjects = window.IQRAA.data.projects.filter(function (p) {
-          return p.clientId === window.IQRAA.data.currentClientId;
-        });
-        var project = null;
-        if (requestedId) {
-          project = myProjects.filter(function (p) {
-            return p.id === requestedId;
-          })[0] || null;
-        } else {
-          project = myProjects[0] || null;
-        }
-        window.IQRAA_PAGE_TITLE_TEXT = project ? project.name : window.IQRAA.i18n.t("clientProject.noProjectsHeading");
+        /* 2026-09-22b "Connect Clients to Airtable": which project this
+           id points to (and its name) can no longer be read synchronously
+           here — it's fetched async, scoped server-side to the
+           authenticated client (js/pages/client-project.js) — so this
+           just shows a "loading" placeholder title until that resolves
+           and updates the header directly, same pattern as
+           project-workspace.html. */
+        window.IQRAA_PAGE_TITLE_KEY = "clientProject.loading";
       })();
     </script>
     <script src="../js/workspace-chrome.js"></script>

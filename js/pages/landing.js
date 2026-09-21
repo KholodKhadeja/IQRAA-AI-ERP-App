@@ -7,6 +7,14 @@ window.IQRAA = window.IQRAA || {};
 
 (function (ns) {
   var EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  /* Israeli phone numbers: a leading 0 (mobile 05X or landline area code)
+     followed by 8-9 more digits, or the same number in +972 form. Spaces/
+     dashes are stripped before testing so "050-123-4567" validates the
+     same as "0501234567". */
+  var PHONE_PATTERN = /^(0\d{8,9}|\+?972\d{8,9})$/;
+  function normalizePhone(value) {
+    return value.replace(/[\s-]/g, "");
+  }
 
   /* Public webhook URL for the n8n lead-capture workflow (see
      "n8n Workflows/Landing_Lead_Capture_Workflow.json"). Not a secret —
@@ -43,7 +51,9 @@ window.IQRAA = window.IQRAA || {};
         : touched.email && !EMAIL_PATTERN.test(fields.email.value)
           ? ns.i18n.t("contact.emailInvalid") : "";
       var phoneError = touched.phone && fields.phone.value.trim().length === 0
-        ? ns.i18n.t("contact.phoneRequired") : "";
+        ? ns.i18n.t("contact.phoneRequired")
+        : touched.phone && !PHONE_PATTERN.test(normalizePhone(fields.phone.value))
+          ? ns.i18n.t("contact.phoneInvalid") : "";
 
       ns.components.textField.setError("contact-name", nameError);
       ns.components.textField.setError("contact-organization", orgError);

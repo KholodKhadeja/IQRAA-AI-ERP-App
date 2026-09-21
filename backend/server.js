@@ -6,9 +6,9 @@
    Architecture (2026-09-21h, "Login authentication flow"):
      pages/login.html (js/services/auth.js)
        -> POST /api/auth/login  -> looks up Email in Airtable, checks
-          Status, verifies password against Password Hash with bcrypt,
+          Status, verifies password against the Password field,
           creates a server-side session (HTTPOnly cookie), updates
-          Last Login, returns { user } (no hash, no PAT)
+          Last Login, returns { user } (no password, no PAT)
      every pages/*.html Workspace page (js/workspace-chrome.js)
        -> GET /api/auth/me  -> confirms the session cookie is still valid;
           redirects to Login if not
@@ -17,8 +17,19 @@
           (see requireAuth/requireRole below) in addition to everything
           the 2026-09-21g task already required
 
+   **Passwords are stored in plaintext, deliberately (2026-09-21l, project
+   owner decision).** The Airtable field was originally "Password Hash"
+   (bcrypt, verified with bcrypt.compare()) — the project owner explicitly
+   asked to drop hashing because this is MVP/demo data, not real user
+   accounts, and renamed the field to plain "Password" to match. See
+   CLAUDE.md §5 for the full rationale and the known test-user passwords.
+   This is a one-way decision to revisit before any real user data ever
+   goes in this table — don't quietly reintroduce hashing without an
+   equally explicit instruction, since that would break every password
+   already stored in plaintext.
+
    Nothing here is guessed: the field names ("Full Name", "Email", "Role",
-   "Status", "Phone", "Password Hash", "Last Login") and the exact Role/
+   "Status", "Phone", "Password", "Last Login") and the exact Role/
    Status option values are confirmed against the real Users table schema
    (GET /v0/meta/bases/.../tables) and a real login was tested end-to-end
    — see the chat report for the 2026-09-21h task, not just this file. */
@@ -29,11 +40,27 @@ const crypto = require("crypto");
 const express = require("express");
 const cors = require("cors");
 const session = require("express-session");
-const bcrypt = require("bcryptjs");
 
 const AIRTABLE_PAT = process.env.AIRTABLE_PAT;
 const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID;
 const AIRTABLE_USERS_TABLE_ID = process.env.AIRTABLE_USERS_TABLE_ID;
+/* Projects table (2026-09-21k "Connect Projects to Airtable" task) — same
+   base as Users, a different table/view. AIRTABLE_PROJECTS_VIEW_ID is
+   optional: if unset, GET /api/projects reads the whole table instead of
+   one view. */
+const AIRTABLE_PROJECTS_TABLE_ID = process.env.AIRTABLE_PROJECTS_TABLE_ID;
+const AIRTABLE_PROJECTS_VIEW_ID = process.env.AIRTABLE_PROJECTS_VIEW_ID;
+/* Leads table (2026-09-22 "Connect Leads to Airtable" task) — same base,
+   a different table. No view id: the required filter (Status = "Meeting
+   Booking") is applied via filterByFormula instead, see the Leads
+   section below for why. */
+const AIRTABLE_LEADS_TABLE_ID = process.env.AIRTABLE_LEADS_TABLE_ID;
+/* Clients table (2026-09-22b "Connect Clients to Airtable" task) — same
+   base, a different table. Also cross-referenced against Projects (via
+   the Clients table's own "Projects" linked-record field) to derive
+   active/completed project counts and to scope a client session to only
+   their own project(s) — see the Clients section below. */
+const AIRTABLE_CLIENTS_TABLE_ID = process.env.AIRTABLE_CLIENTS_TABLE_ID;
 const PORT = process.env.PORT || 3001;
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "http://localhost:3000";
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
@@ -133,7 +160,17 @@ app.use(
     cookie: {
       httpOnly: true,
       secure: IS_PRODUCTION,
-      sameSite: "lax",
+      /* "lax" works for local dev (frontend/backend are both "localhost",
+         same site regardless of port). In production the frontend and
+         this backend are deployed as two different Render services on
+         two different *.onrender.com subdomains — onrender.com is on the
+         public suffix list, so those count as different sites, and a
+         "lax" cookie is never sent on a cross-site fetch()/XHR (only on
+         top-level navigation). Without "none" here, login would appear
+         to succeed (200 + Set-Cookie) but every subsequent request would
+         arrive with no cookie, so GET /api/auth/me would always 401.
+         SameSite=None requires Secure, which IS_PRODUCTION already is. */
+      sameSite: IS_PRODUCTION ? "none" : "lax",
       maxAge: 8 * 60 * 60 * 1000 // 8 hours
     }
   })
@@ -160,6 +197,57 @@ function requireAirtableConfigured(req, res, next) {
     return res.status(503).json({
       error: "Airtable is not configured on this backend.",
       missingEnvVars: MISSING_ENV_VARS
+    });
+  }
+  next();
+}
+
+/* Separate from requireAirtableConfigured above on purpose: AIRTABLE_PAT/
+   AIRTABLE_BASE_ID are shared, but a missing AIRTABLE_PROJECTS_TABLE_ID
+   must only disable /api/projects, not also take down Login/Users. */
+function requireProjectsConfigured(req, res, next) {
+  const missing = [];
+  if (!AIRTABLE_PAT) missing.push("AIRTABLE_PAT");
+  if (!AIRTABLE_BASE_ID) missing.push("AIRTABLE_BASE_ID");
+  if (!AIRTABLE_PROJECTS_TABLE_ID) missing.push("AIRTABLE_PROJECTS_TABLE_ID");
+  if (missing.length > 0) {
+    return res.status(503).json({
+      error: "Airtable Projects table is not configured on this backend.",
+      missingEnvVars: missing
+    });
+  }
+  next();
+}
+
+/* Same reasoning as requireProjectsConfigured above — a missing
+   AIRTABLE_LEADS_TABLE_ID must only disable /api/leads. */
+function requireLeadsConfigured(req, res, next) {
+  const missing = [];
+  if (!AIRTABLE_PAT) missing.push("AIRTABLE_PAT");
+  if (!AIRTABLE_BASE_ID) missing.push("AIRTABLE_BASE_ID");
+  if (!AIRTABLE_LEADS_TABLE_ID) missing.push("AIRTABLE_LEADS_TABLE_ID");
+  if (missing.length > 0) {
+    return res.status(503).json({
+      error: "Airtable Leads table is not configured on this backend.",
+      missingEnvVars: missing
+    });
+  }
+  next();
+}
+
+/* Same reasoning again — the Clients endpoints below also read Projects
+   (to derive project counts / scope a client's own projects), so both
+   table ids are required. */
+function requireClientsConfigured(req, res, next) {
+  const missing = [];
+  if (!AIRTABLE_PAT) missing.push("AIRTABLE_PAT");
+  if (!AIRTABLE_BASE_ID) missing.push("AIRTABLE_BASE_ID");
+  if (!AIRTABLE_CLIENTS_TABLE_ID) missing.push("AIRTABLE_CLIENTS_TABLE_ID");
+  if (!AIRTABLE_PROJECTS_TABLE_ID) missing.push("AIRTABLE_PROJECTS_TABLE_ID");
+  if (missing.length > 0) {
+    return res.status(503).json({
+      error: "Airtable Clients/Projects tables are not configured on this backend.",
+      missingEnvVars: missing
     });
   }
   next();
@@ -263,19 +351,21 @@ app.post("/api/auth/login", requireAirtableConfigured, async function (req, res)
 
     const fields = userRecord.fields || {};
     const status = (fields.Status || "").trim();
-    const passwordHash = fields["Password Hash"];
+    const storedPassword = fields.Password;
     const appRole = mapAirtableRoleToAppRole(fields.Role);
 
     if (status !== "Active") {
       console.warn("[backend] Login failed (status is " + JSON.stringify(status) + "):", email);
       return res.status(401).json(GENERIC_FAILURE);
     }
-    if (!passwordHash) {
-      console.warn("[backend] Login failed (no Password Hash on record):", email);
+    if (!storedPassword) {
+      console.warn("[backend] Login failed (no Password on record):", email);
       return res.status(401).json(GENERIC_FAILURE);
     }
 
-    const passwordMatches = await bcrypt.compare(password, passwordHash);
+    /* Plaintext comparison, deliberately — see the file-header comment
+       (2026-09-21l) on why this isn't bcrypt.compare() any more. */
+    const passwordMatches = password === storedPassword;
     if (!passwordMatches) {
       console.warn("[backend] Login failed (wrong password):", email);
       return res.status(401).json(GENERIC_FAILURE);
@@ -341,20 +431,14 @@ app.post("/api/users", requireAuth, requireRole("admin"), requireAirtableConfigu
     return res.status(400).json({ error: "Validation failed", details: validationErrors });
   }
 
-  let passwordHash;
-  try {
-    passwordHash = await bcrypt.hash(password, 10);
-  } catch (hashError) {
-    console.error("[backend] Password hashing failed:", hashError);
-    return res.status(500).json({ error: "Failed to process password." });
-  }
-
+  /* Plaintext, deliberately — see the file-header comment (2026-09-21l)
+     on why this is no longer bcrypt.hash(). */
   const fields = {
     "Full Name": fullName,
     Email: email,
     Role: ROLE_KEY_TO_AIRTABLE_LABEL[roleKey],
     Status: status,
-    "Password Hash": passwordHash,
+    Password: password,
     "Must Change Password": "No"
   };
   if (phone) fields.Phone = phone;
@@ -395,6 +479,1326 @@ app.post("/api/users", requireAuth, requireRole("admin"), requireAirtableConfigu
   } catch (networkError) {
     console.error("[backend] Could not reach Airtable:", networkError);
     return res.status(502).json({ error: "Could not reach Airtable.", details: networkError.message });
+  }
+});
+
+/* ===== Team (2026-09-22 "Connect Team pages to Airtable") =====
+
+   pages/team.html (js/services/users-api.js) -> GET /api/users/team ->
+   this server -> Airtable REST API (read-only) -> the same Airtable
+   Users table as Auth/Users above. Requires an authenticated Admin
+   session (requireRole("admin")) — Team Management is an Admin/CEO-only
+   screen (CLAUDE.md §9), and only an Admin may see every user's Role/
+   Status/Phone/Email in bulk. Never exposes Password/Must Change
+   Password/User ID — see mapTeamMemberRecord() below.
+
+   Field mapping (Airtable field -> response field), confirmed against
+   the real schema via get_table_schema, not guessed:
+     Full Name -> fullName
+     Email -> email
+     Role (singleSelect) -> role, but ONLY for the 5 team-member-specialty
+       labels in ROLE_KEY_TO_AIRTABLE_LABEL above (reused in reverse via
+       AIRTABLE_LABEL_NORMALIZED_TO_TEAM_ROLE_KEY) — every other record
+       (Admin, Project Manager, Client, or a blank placeholder row) is
+       filtered out entirely, not just relabeled. This matches both the
+       task's explicit "do not display Clients as team members" rule and
+       the pre-existing project-role model, where team.html/data.teamMembers
+       already only ever modeled team-member-specialty roles, never
+       Admin/PM.
+     Status -> status ("active"/"inactive", lowercased/trimmed)
+     Phone -> phone
+
+   Known scope limit (documented, not a bug): the table's "Active
+   Projects"/"Active Tasks" columns are still computed client-side from
+   the mock js/data/mock-data.js Projects/Tasks (ph.projectsForTeamMember/
+   data.tasks), which use fake "tm-N" ids unrelated to these real
+   Airtable record ids — so those two columns correctly show 0 for every
+   real team member until a future task wires Projects/Tasks to real
+   Users. Not built here per this task's explicit "don't build a new
+   data architecture, keep it incremental" instruction. */
+
+var AIRTABLE_LABEL_NORMALIZED_TO_TEAM_ROLE_KEY = {};
+Object.keys(ROLE_KEY_TO_AIRTABLE_LABEL).forEach(function (roleKey) {
+  AIRTABLE_LABEL_NORMALIZED_TO_TEAM_ROLE_KEY[ROLE_KEY_TO_AIRTABLE_LABEL[roleKey].trim().toLowerCase()] = roleKey;
+});
+
+function mapAirtableRoleToTeamRoleKey(rawRole) {
+  const normalized = (rawRole || "").trim().toLowerCase();
+  return AIRTABLE_LABEL_NORMALIZED_TO_TEAM_ROLE_KEY[normalized] || null;
+}
+
+async function fetchAllUserRecords() {
+  const records = [];
+  let offset;
+  do {
+    const params = new URLSearchParams();
+    if (offset) params.set("offset", offset);
+    const url = "https://api.airtable.com/v0/" + AIRTABLE_BASE_ID + "/" + AIRTABLE_USERS_TABLE_ID + "?" + params.toString();
+    const response = await fetch(url, {
+      headers: { Authorization: "Bearer " + AIRTABLE_PAT }
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(function () {
+        return {};
+      });
+      const error = new Error("Airtable Users fetch failed: " + response.status);
+      error.airtableStatus = response.status;
+      error.airtableError = body && body.error;
+      throw error;
+    }
+    const body = await response.json();
+    records.push.apply(records, body.records || []);
+    offset = body.offset;
+  } while (offset);
+  return records;
+}
+
+function mapTeamMemberRecord(record) {
+  const fields = record.fields || {};
+  const roleKey = mapAirtableRoleToTeamRoleKey(fields.Role);
+  if (!roleKey) return null;
+  const status = (fields.Status || "").trim().toLowerCase();
+  return {
+    id: record.id,
+    fullName: fields["Full Name"] || null,
+    email: fields.Email || null,
+    role: roleKey,
+    status: status === "inactive" ? "inactive" : "active",
+    phone: fields.Phone || null
+  };
+}
+
+app.get("/api/users/team", requireAuth, requireRole("admin"), requireAirtableConfigured, async function (req, res) {
+  try {
+    const records = await fetchAllUserRecords();
+    const teamMembers = records.map(mapTeamMemberRecord).filter(function (member) {
+      return member !== null;
+    });
+    return res.json({ teamMembers: teamMembers });
+  } catch (err) {
+    console.error("[backend] Failed to fetch Users (team) from Airtable:", err);
+    return res.status(502).json({
+      error: "Could not retrieve team members from Airtable.",
+      airtableStatus: err.airtableStatus,
+      airtableError: err.airtableError,
+      details: err.airtableStatus ? undefined : err.message
+    });
+  }
+});
+
+/* ===== Projects (2026-09-21k "Connect Projects to Airtable") =====
+
+   pages/projects.html + pages/project-workspace.html (js/services/
+   projects-api.js) -> GET /api/projects -> this server -> Airtable REST
+   API (read-only) -> Airtable Projects table (tblK5seFEBbACNEWq, view
+   viwYcfbVNh8THD3jx). Requires an authenticated session (any role) —
+   the same "frontend never talks to Airtable directly" rule as Users/
+   Auth above; the PAT never leaves this server.
+
+   Field mapping (Airtable field -> response field), confirmed against
+   the real schema via get_table_schema, not guessed:
+     Project Name        -> name
+     Client (plain text)  -> client
+     Status (singleSelect)-> status        (raw option label, e.g. "In Progress")
+     Current Stage (sel.) -> stage         (raw option label, e.g. "Production")
+     Progress (percent)   -> progress      (0-1 fraction from Airtable -> 0-100 int)
+     Start Date            -> startDate
+     Expected Completion   -> expectedCompletion
+     Deadline               -> deadline
+
+   Deliberately NOT included/resolved: "Project Manager" is a linked
+   record (Users table) with no reliable display-name field available on
+   the Projects table itself (its only lookup pulls Users' "User ID",
+   which is unset on most real user records per the Users backend notes
+   above) — resolving a PM name would mean joining the Users table, which
+   is out of this task's scope. The frontend shows "Unassigned" for every
+   real project until a future task adds that join. */
+
+function airtableSelectName(value) {
+  if (!value) return null;
+  return typeof value === "string" ? value : value.name || null;
+}
+
+async function fetchAllProjectRecords() {
+  const records = [];
+  let offset;
+  do {
+    const params = new URLSearchParams();
+    if (AIRTABLE_PROJECTS_VIEW_ID) params.set("view", AIRTABLE_PROJECTS_VIEW_ID);
+    if (offset) params.set("offset", offset);
+    const url = "https://api.airtable.com/v0/" + AIRTABLE_BASE_ID + "/" + AIRTABLE_PROJECTS_TABLE_ID + "?" + params.toString();
+    const response = await fetch(url, {
+      headers: { Authorization: "Bearer " + AIRTABLE_PAT }
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(function () {
+        return {};
+      });
+      const error = new Error("Airtable Projects fetch failed: " + response.status);
+      error.airtableStatus = response.status;
+      error.airtableError = body && body.error;
+      throw error;
+    }
+    const body = await response.json();
+    records.push.apply(records, body.records || []);
+    offset = body.offset;
+  } while (offset);
+  return records;
+}
+
+function mapProjectRecord(record) {
+  const fields = record.fields || {};
+  const progressFraction = typeof fields.Progress === "number" ? fields.Progress : 0;
+  return {
+    id: record.id,
+    projectCode: fields["Project ID"] || null,
+    name: fields["Project Name"] || null,
+    client: fields.Client || null,
+    status: airtableSelectName(fields.Status),
+    stage: airtableSelectName(fields["Current Stage"]),
+    progress: Math.round(progressFraction * 100),
+    startDate: fields["Start Date"] || null,
+    expectedCompletion: fields["Expected Completion"] || null,
+    deadline: fields.Deadline || null,
+    /* Raw "Project Manager" linked-record ids (2026-09-22 "Connect Admin
+       Dashboard to Airtable") — purely additive, /api/projects' existing
+       consumers (projects.js, project-workspace.js) ignore fields they
+       don't know about. Added so GET /api/dashboard/admin can resolve a
+       PM display name via the Users table without a second Projects
+       fetch/mapping function. */
+    pmIds: fields["Project Manager"] || []
+  };
+}
+
+app.get("/api/projects", requireAuth, requireProjectsConfigured, async function (req, res) {
+  try {
+    const records = await fetchAllProjectRecords();
+    return res.json({ projects: records.map(mapProjectRecord) });
+  } catch (err) {
+    console.error("[backend] Failed to fetch Projects from Airtable:", err);
+    return res.status(502).json({
+      error: "Could not retrieve projects from Airtable.",
+      airtableStatus: err.airtableStatus,
+      airtableError: err.airtableError,
+      details: err.airtableStatus ? undefined : err.message
+    });
+  }
+});
+
+/* ===== Leads (2026-09-22 "Connect Leads to Airtable") =====
+
+   pages/leads.html (js/services/leads-api.js) -> GET /api/leads -> this
+   server -> Airtable REST API (read-only) -> Airtable Leads table
+   (tbloeMHPaOzQSypPb). Requires an authenticated session (any role) —
+   same "frontend never talks to Airtable directly" rule as Users/Auth/
+   Projects above; the PAT never leaves this server.
+
+   **Status filter**: the task asked for leads whose Status is exactly
+   "BOOKING MEETING", but the real Status single-select options
+   (confirmed via get_table_schema, not guessed) are "New Lead" /
+   "Processing" / "Meeting Booking" / "Proccessed" — there is no
+   "BOOKING MEETING" option. Confirmed with the project owner to filter
+   on the real option, "Meeting Booking", instead — see CLAUDE.md's
+   note on this task for the full reasoning. The filter runs server-side
+   via Airtable's filterByFormula (so unrelated leads are never even
+   fetched, per the task's "prefer filtering at the backend/Airtable
+   request level" instruction), and js/pages/leads.js re-checks it
+   client-side as a defensive second layer.
+
+   Field mapping (Airtable field -> response field), confirmed against
+   the real schema via get_table_schema, not guessed:
+     Name                 -> name
+     Organization          -> org
+     Email                  -> email
+     Phone                   -> phone
+     Message Content          -> message
+     Status (singleSelect)     -> status   (raw option label, "Meeting Booking" for every result — see filter above)
+     (record's own createdTime, always present on every Airtable record) -> created
+
+   Deliberately NOT included/invented: the Leads table has no field for
+   product/service interest, assigned-to owner, or a separate "last
+   activity" timestamp — the mock data these replaced had all three, but
+   inventing them here would violate the "no fake data" rule this was
+   built under. The frontend shows a placeholder for each instead — see
+   js/pages/leads.js. "Confirmation Email Thread ID" (an internal n8n
+   bookkeeping field, not lead-facing data) is deliberately excluded from
+   the response too. */
+
+var LEADS_STATUS_FILTER = "Meeting Booking";
+
+function mapLeadRecord(record) {
+  const fields = record.fields || {};
+  return {
+    id: record.id,
+    name: fields.Name || null,
+    org: fields.Organization || null,
+    email: fields.Email || null,
+    phone: fields.Phone || null,
+    message: fields["Message Content"] || null,
+    status: airtableSelectName(fields.Status),
+    created: record.createdTime || null
+  };
+}
+
+app.get("/api/leads", requireAuth, requireLeadsConfigured, async function (req, res) {
+  try {
+    const formula = '{Status}="' + escapeForFormula(LEADS_STATUS_FILTER) + '"';
+    const records = [];
+    let offset;
+    do {
+      const params = new URLSearchParams();
+      params.set("filterByFormula", formula);
+      if (offset) params.set("offset", offset);
+      const url = "https://api.airtable.com/v0/" + AIRTABLE_BASE_ID + "/" + AIRTABLE_LEADS_TABLE_ID + "?" + params.toString();
+      const response = await fetch(url, {
+        headers: { Authorization: "Bearer " + AIRTABLE_PAT }
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(function () {
+          return {};
+        });
+        const error = new Error("Airtable Leads fetch failed: " + response.status);
+        error.airtableStatus = response.status;
+        error.airtableError = body && body.error;
+        throw error;
+      }
+      const body = await response.json();
+      records.push.apply(records, body.records || []);
+      offset = body.offset;
+    } while (offset);
+
+    return res.json({ leads: records.map(mapLeadRecord) });
+  } catch (err) {
+    console.error("[backend] Failed to fetch Leads from Airtable:", err);
+    return res.status(502).json({
+      error: "Could not retrieve leads from Airtable.",
+      airtableStatus: err.airtableStatus,
+      airtableError: err.airtableError,
+      details: err.airtableStatus ? undefined : err.message
+    });
+  }
+});
+
+/* ===== Clients (2026-09-22b "Connect Clients to Airtable") =====
+
+   pages/clients.html (Admin-only list) and pages/client-project.html
+   (a client's own project view) both go through js/services/clients-api.js
+   -> this server -> Airtable REST API (read-only) -> Airtable Clients
+   table (tblZ6VWxICXnkmzzp), cross-referenced with Projects
+   (tblK5seFEBbACNEWq) via the Clients table's own "Projects"
+   linked-record field (confirmed via get_table_schema, the inverse of
+   Projects' own "Clients" link — the exact relationship the task asked
+   to reuse, not a new one).
+
+   Two endpoints, deliberately different in shape and authorization:
+
+   GET /api/clients (requireRole("admin")) — the admin-facing list.
+   Returns every client with derived active/completed project counts and
+   a lightweight list of their linked projects (id/name/status), enough
+   for pages/clients.html's list + details modal. Field mapping, not
+   guessed:
+     Client Name             -> name
+     Orginazation (sic, real field name) -> organization
+     Email                    -> email
+     Phone                     -> phone
+     Projects (linked records)  -> activeProjects/completedProjects (derived:
+       active = every linked project whose Status isn't "Completed"/
+       "Cancelled"; completed = Status === "Completed") + a projects[]
+       summary array for the details modal.
+   Deliberately NOT included: there is no "Status" or "last activity"
+   field on the real Clients table at all (unlike Projects/Leads/Users) —
+   inventing one would violate the "no fake data" rule this was built
+   under. The frontend shows a placeholder instead of a Status/Last
+   Activity column value.
+
+   GET /api/clients/me (requireRole("client")) — what client-project.html
+   actually calls. This is the security-critical one (task's explicit
+   "another client's project must not be reachable by changing a URL
+   parameter" requirement): it NEVER accepts a client-supplied client/
+   project id from the request. Instead it looks up the Clients record
+   whose Email matches the AUTHENTICATED SESSION's email (the same
+   email-based lookup pattern findUserByEmail already uses for login),
+   and returns only that client's own linked project(s). There's no
+   Users->Clients link field in the real schema (Users has no such
+   field), so email is the closest existing, safely-derivable join key —
+   every login is already keyed by a unique Email, and Clients has its
+   own Email field for exactly this kind of contact identification.
+   client-project.js then picks among ITS OWN returned projects by
+   `?id=` client-side — it can never cause the backend to fetch a
+   project outside that authorized set, because the backend already
+   only ever fetched that set to begin with. */
+
+function mapClientSummary(record, projectsById) {
+  const fields = record.fields || {};
+  const linkedProjectIds = fields.Projects || [];
+  const linkedProjects = linkedProjectIds.map(function (id) {
+    return projectsById[id];
+  }).filter(Boolean);
+  const active = linkedProjects.filter(function (p) {
+    return p.status !== "Completed" && p.status !== "Cancelled";
+  });
+  const completed = linkedProjects.filter(function (p) {
+    return p.status === "Completed";
+  });
+  return {
+    id: record.id,
+    name: fields["Client Name"] || null,
+    organization: fields.Orginazation || null,
+    email: fields.Email || null,
+    phone: fields.Phone || null,
+    activeProjects: active.length,
+    completedProjects: completed.length,
+    projects: linkedProjects.map(function (p) {
+      return { id: p.id, name: p.name, status: p.status };
+    })
+  };
+}
+
+async function fetchAllClientRecords() {
+  const records = [];
+  let offset;
+  do {
+    const params = new URLSearchParams();
+    if (offset) params.set("offset", offset);
+    const url = "https://api.airtable.com/v0/" + AIRTABLE_BASE_ID + "/" + AIRTABLE_CLIENTS_TABLE_ID + (params.toString() ? "?" + params.toString() : "");
+    const response = await fetch(url, {
+      headers: { Authorization: "Bearer " + AIRTABLE_PAT }
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(function () {
+        return {};
+      });
+      const error = new Error("Airtable Clients fetch failed: " + response.status);
+      error.airtableStatus = response.status;
+      error.airtableError = body && body.error;
+      throw error;
+    }
+    const body = await response.json();
+    records.push.apply(records, body.records || []);
+    offset = body.offset;
+  } while (offset);
+  return records;
+}
+
+async function buildProjectsById() {
+  const projectRecords = await fetchAllProjectRecords();
+  const projectsById = {};
+  projectRecords.map(mapProjectRecord).forEach(function (p) {
+    projectsById[p.id] = p;
+  });
+  return projectsById;
+}
+
+app.get("/api/clients", requireAuth, requireRole("admin"), requireClientsConfigured, async function (req, res) {
+  try {
+    const projectsById = await buildProjectsById();
+    const clientRecords = await fetchAllClientRecords();
+    return res.json({ clients: clientRecords.map(function (r) {
+      return mapClientSummary(r, projectsById);
+    }) });
+  } catch (err) {
+    console.error("[backend] Failed to fetch Clients from Airtable:", err);
+    return res.status(502).json({
+      error: "Could not retrieve clients from Airtable.",
+      airtableStatus: err.airtableStatus,
+      airtableError: err.airtableError,
+      details: err.airtableStatus ? undefined : err.message
+    });
+  }
+});
+
+app.get("/api/clients/me", requireAuth, requireRole("client"), requireClientsConfigured, async function (req, res) {
+  try {
+    const formula = 'LOWER({Email})=LOWER("' + escapeForFormula(req.session.user.email) + '")';
+    const url =
+      "https://api.airtable.com/v0/" +
+      AIRTABLE_BASE_ID +
+      "/" +
+      AIRTABLE_CLIENTS_TABLE_ID +
+      "?maxRecords=1&filterByFormula=" +
+      encodeURIComponent(formula);
+    const response = await fetch(url, {
+      headers: { Authorization: "Bearer " + AIRTABLE_PAT }
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(function () {
+        return {};
+      });
+      console.error("[backend] Clients lookup by email failed:", response.status, JSON.stringify(body));
+      return res.status(502).json({ error: "Could not look up client record." });
+    }
+    const body = await response.json();
+    const clientRecord = body.records && body.records[0];
+    if (!clientRecord) {
+      /* No Clients record's Email matches this session — this account
+         isn't linked to a client, so there is nothing it's authorized to
+         see. 403, not 404: the caller IS authenticated, just not
+         authorized for any client data at all. */
+      console.warn("[backend] Authenticated client session has no matching Clients record:", req.session.user.email);
+      return res.status(403).json({ error: "No client record is linked to this account." });
+    }
+
+    const fields = clientRecord.fields || {};
+    const linkedProjectIds = fields.Projects || [];
+    let projects = [];
+    if (linkedProjectIds.length > 0) {
+      const projectsById = await buildProjectsById();
+      projects = linkedProjectIds.map(function (id) {
+        return projectsById[id];
+      }).filter(Boolean);
+    }
+
+    return res.json({
+      client: {
+        id: clientRecord.id,
+        name: fields["Client Name"] || null,
+        organization: fields.Orginazation || null,
+        email: fields.Email || null,
+        phone: fields.Phone || null
+      },
+      projects: projects
+    });
+  } catch (err) {
+    console.error("[backend] Failed to resolve authenticated client's projects:", err);
+    return res.status(502).json({
+      error: "Could not retrieve your project information from Airtable.",
+      airtableStatus: err.airtableStatus,
+      airtableError: err.airtableError,
+      details: err.airtableStatus ? undefined : err.message
+    });
+  }
+});
+
+/* ===== Admin Dashboard (2026-09-22 "Connect Admin Dashboard to Airtable") =====
+
+   pages/dashboard-admin.html (js/services/dashboard-api.js) -> GET
+   /api/dashboard/admin -> this server -> Airtable REST API (read-only,
+   5 existing tables: Leads, Users, Projects, Tasks, Payments) -> one
+   computed JSON summary. This is a summary/reporting endpoint, not a new
+   Airtable table — every number is derived from tables the rest of the
+   app already reads, joined and aggregated server-side so the frontend
+   makes exactly one request per page load. Requires an authenticated
+   Admin session (requireRole("admin")), same as /api/clients.
+
+   Deliberately NOT fetched: Clients (Projects.Client is already a plain
+   text field — no join needed) and Meetings & Decisions (nothing on this
+   dashboard's existing UI surfaces meeting data).
+
+   Status vocabulary and workflow rules below are confirmed against the
+   real schema (get_table_schema) and real records (list_records_for_table),
+   not guessed:
+
+     Leads.Status options: "New Lead" / "Processing" / "Meeting Booking" /
+       "Proccessed". "New Leads" KPI = count of Status === "New Lead" —
+       matches the existing Hebrew label "לידים חדשים" ("new leads")
+       literally, a lead that hasn't been contacted/processed yet at all
+       (distinct from leads.html's own "Meeting Booking" filter, which is
+       a different, later stage of the same pipeline).
+
+     Projects.Status options: "Draft" / "Ready to Start" / "In Progress" /
+       "On Hold" / "Completed" / "Cancelled". "Active Projects" = Status
+       === "In Progress", the only option that actually means work is
+       underway.
+
+     Projects.Current Stage includes "Client Script Approval" / "Client
+       Review" / "Client Approval" — the same 3-stage "waiting on client"
+       set js/services/project-helpers.js's CLIENT_ACTION_STAGES already
+       encodes for mock data. "Pending Client Approvals" = projects whose
+       Current Stage is one of these three.
+
+     Payments.Payment Type options: "First" / "Milestone" / "Final".
+     Payments.Status options: "Pending" / "Paid" / "Overdue". Per
+       CLAUDE.md §10's documented workflow ("when the first project
+       payment is received, the project becomes ready to start"), a
+       project's Status being "Ready to Start" is not itself proof the
+       payment was confirmed (that field can be set by hand) — "Ready to
+       Start" KPI/list = projects with Status === "Ready to Start" AND at
+       least one linked Payment with Payment Type === "First" and Status
+       === "Paid", joined via Payments' own "Projects" link field (the
+       reverse of Projects' "Payments 2" link field).
+
+     "Outstanding Payments" = every Payment whose Status !== "Paid" (i.e.
+       "Pending" or "Overdue") — count + sum of Amount.
+
+     Tasks.Status options: "Not Started" / "In Progress" / "Waiting" /
+       "Review" / "Completed". "Overdue Tasks" = Status !== "Completed"
+       AND Due Date is before today (server's own clock, date-only
+       comparison, same rule as isTaskOverdue below).
+
+   PM Workload: Users whose Role maps to app role "pm" (see
+   AIRTABLE_ROLE_TO_APP_ROLE above), joined against Projects' own
+   "Project Manager" link field (not the "User ID (from Project
+   Manager)" lookup, which is unset on most real records — see the
+   Projects section above). projectCount = # of Projects linking to that
+   PM's user record id; attentionCount = # of those projects with at
+   least one overdue task — the simplest "needs attention" signal the
+   real schema actually supports without inventing a new field.
+
+   Live-data note (2026-09-22): at the time this was built, the real base
+   has 0 Task records, 0 populated Payment records and 0 Users with Role
+   "Project Manager" — so overdueTasks/outstandingPayments/readyToStart/
+   pmWorkload legitimately compute to 0/empty against the current data,
+   not a bug. See the chat report for this task for the full live
+   verification against the actual records. */
+
+const AIRTABLE_TASKS_TABLE_ID = process.env.AIRTABLE_TASKS_TABLE_ID;
+const AIRTABLE_PAYMENTS_TABLE_ID = process.env.AIRTABLE_PAYMENTS_TABLE_ID;
+/* AIRTABLE_PAYMENTS_VIEW_ID is optional, same pattern as
+   AIRTABLE_PROJECTS_VIEW_ID: if unset, GET /api/billing reads the whole
+   Payments table instead of one view. */
+const AIRTABLE_PAYMENTS_VIEW_ID = process.env.AIRTABLE_PAYMENTS_VIEW_ID;
+/* Meetings & Decisions table (2026-09-22c "Connect PM Dashboard to
+   Airtable") — used only by GET /api/dashboard/pm's "Recent Project
+   Activity" panel, see that route below. */
+const AIRTABLE_MEETINGS_TABLE_ID = process.env.AIRTABLE_MEETINGS_TABLE_ID;
+/* Invoices table (2026-09-22d "Connect Billing to Airtable") — used only
+   by GET /api/billing, see that route below. AIRTABLE_INVOICES_VIEW_ID is
+   optional, same pattern as AIRTABLE_PAYMENTS_VIEW_ID above. */
+const AIRTABLE_INVOICES_TABLE_ID = process.env.AIRTABLE_INVOICES_TABLE_ID;
+const AIRTABLE_INVOICES_VIEW_ID = process.env.AIRTABLE_INVOICES_VIEW_ID;
+
+function requireDashboardConfigured(req, res, next) {
+  const missing = [];
+  if (!AIRTABLE_PAT) missing.push("AIRTABLE_PAT");
+  if (!AIRTABLE_BASE_ID) missing.push("AIRTABLE_BASE_ID");
+  if (!AIRTABLE_LEADS_TABLE_ID) missing.push("AIRTABLE_LEADS_TABLE_ID");
+  if (!AIRTABLE_PROJECTS_TABLE_ID) missing.push("AIRTABLE_PROJECTS_TABLE_ID");
+  if (!AIRTABLE_TASKS_TABLE_ID) missing.push("AIRTABLE_TASKS_TABLE_ID");
+  if (!AIRTABLE_PAYMENTS_TABLE_ID) missing.push("AIRTABLE_PAYMENTS_TABLE_ID");
+  if (!AIRTABLE_USERS_TABLE_ID) missing.push("AIRTABLE_USERS_TABLE_ID");
+  if (missing.length > 0) {
+    return res.status(503).json({
+      error: "Airtable tables required for the Admin Dashboard are not fully configured on this backend.",
+      missingEnvVars: missing
+    });
+  }
+  next();
+}
+
+/* Generic paginated fetch, used only by the 3 tables this endpoint reads
+   that have no existing fetchAll* helper (Tasks, Payments, and an
+   unfiltered read of Leads — the existing /api/leads route's Leads fetch
+   is deliberately pre-filtered to "Meeting Booking" via filterByFormula,
+   which isn't what this endpoint needs). Users/Projects reuse the
+   existing fetchAllUserRecords()/fetchAllProjectRecords() above rather
+   than duplicating those. */
+async function fetchAllRecordsGeneric(tableId) {
+  const records = [];
+  let offset;
+  do {
+    const params = new URLSearchParams();
+    if (offset) params.set("offset", offset);
+    const url = "https://api.airtable.com/v0/" + AIRTABLE_BASE_ID + "/" + tableId + (params.toString() ? "?" + params.toString() : "");
+    const response = await fetch(url, {
+      headers: { Authorization: "Bearer " + AIRTABLE_PAT }
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(function () {
+        return {};
+      });
+      const error = new Error("Airtable fetch failed for table " + tableId + ": " + response.status);
+      error.airtableStatus = response.status;
+      error.airtableError = body && body.error;
+      throw error;
+    }
+    const body = await response.json();
+    records.push.apply(records, body.records || []);
+    offset = body.offset;
+  } while (offset);
+  return records;
+}
+
+function mapDashboardLeadRecord(record) {
+  const fields = record.fields || {};
+  return { id: record.id, status: airtableSelectName(fields.Status) };
+}
+
+function mapDashboardTaskRecord(record) {
+  const fields = record.fields || {};
+  return {
+    id: record.id,
+    /* "title" is additive (2026-09-22c "Connect PM Dashboard to Airtable")
+       — the Admin Dashboard endpoint never needed a task's display name,
+       only its Project/Status/Due Date, so this field didn't exist before.
+       Purely additive: that endpoint's own mapping call site ignores
+       fields it doesn't read. */
+    title: fields["Task Name"] || null,
+    projectIds: fields.Project || [],
+    status: airtableSelectName(fields.Status),
+    dueDate: fields["Due Date"] || null
+  };
+}
+
+function mapDashboardPaymentRecord(record) {
+  const fields = record.fields || {};
+  return {
+    id: record.id,
+    projectIds: fields.Projects || [],
+    type: airtableSelectName(fields["Payment Type"]),
+    amount: typeof fields.Amount === "number" ? fields.Amount : 0,
+    status: airtableSelectName(fields.Status)
+  };
+}
+
+function isTaskOverdue(task) {
+  if (!task.dueDate) return false;
+  if (task.status === "Completed") return false;
+  return new Date(task.dueDate) < new Date(new Date().toDateString());
+}
+
+var DASHBOARD_CLIENT_ACTION_STAGES = ["Client Script Approval", "Client Review", "Client Approval"];
+
+/* Fixed pipeline order (matches Projects.Current Stage's real 10 select
+   options, in the order they're configured in Airtable) so "Projects by
+   Stage" always returns all 10 stages, including ones with a 0 count —
+   same "show every stage, not just non-empty ones" behavior as the mock
+   dashboard's stage summary bars. */
+var DASHBOARD_STAGE_ORDER = [
+  "Specification",
+  "Script",
+  "Client Script Approval",
+  "Design",
+  "Production",
+  "QA",
+  "Client Review",
+  "Changes",
+  "Client Approval",
+  "Publication"
+];
+
+app.get("/api/dashboard/admin", requireAuth, requireRole("admin"), requireDashboardConfigured, async function (req, res) {
+  try {
+    const [leadRecords, projectRecords, taskRecords, paymentRecords, userRecords] = await Promise.all([
+      fetchAllRecordsGeneric(AIRTABLE_LEADS_TABLE_ID),
+      fetchAllProjectRecords(),
+      fetchAllRecordsGeneric(AIRTABLE_TASKS_TABLE_ID),
+      fetchAllRecordsGeneric(AIRTABLE_PAYMENTS_TABLE_ID),
+      fetchAllUserRecords()
+    ]);
+
+    const leads = leadRecords.map(mapDashboardLeadRecord);
+    const projects = projectRecords.map(mapProjectRecord);
+    const tasks = taskRecords.map(mapDashboardTaskRecord);
+    const payments = paymentRecords.map(mapDashboardPaymentRecord);
+
+    const usersById = {};
+    userRecords.forEach(function (r) {
+      usersById[r.id] = { fullName: (r.fields && r.fields["Full Name"]) || null };
+    });
+
+    function pmNameFor(project) {
+      const names = (project.pmIds || [])
+        .map(function (id) {
+          return usersById[id] && usersById[id].fullName;
+        })
+        .filter(Boolean);
+      return names.length ? names.join(", ") : null;
+    }
+
+    const paymentsByProjectId = {};
+    payments.forEach(function (payment) {
+      payment.projectIds.forEach(function (pid) {
+        if (!paymentsByProjectId[pid]) paymentsByProjectId[pid] = [];
+        paymentsByProjectId[pid].push(payment);
+      });
+    });
+
+    const tasksByProjectId = {};
+    tasks.forEach(function (task) {
+      task.projectIds.forEach(function (pid) {
+        if (!tasksByProjectId[pid]) tasksByProjectId[pid] = [];
+        tasksByProjectId[pid].push(task);
+      });
+    });
+
+    function firstPaymentStatusFor(projectId) {
+      const first = (paymentsByProjectId[projectId] || []).filter(function (p) {
+        return p.type === "First";
+      })[0];
+      return first ? first.status : null;
+    }
+
+    function hasConfirmedFirstPayment(projectId) {
+      return (paymentsByProjectId[projectId] || []).some(function (p) {
+        return p.type === "First" && p.status === "Paid";
+      });
+    }
+
+    const newLeadsCount = leads.filter(function (l) {
+      return l.status === "New Lead";
+    }).length;
+
+    const activeProjects = projects.filter(function (p) {
+      return p.status === "In Progress";
+    });
+
+    const readyToStartProjects = projects.filter(function (p) {
+      return p.status === "Ready to Start" && hasConfirmedFirstPayment(p.id);
+    });
+
+    const pendingClientApprovalsCount = projects.filter(function (p) {
+      return DASHBOARD_CLIENT_ACTION_STAGES.indexOf(p.stage) !== -1;
+    }).length;
+
+    const overdueTasks = tasks.filter(isTaskOverdue);
+
+    const outstandingPayments = payments.filter(function (p) {
+      return p.status === "Pending" || p.status === "Overdue";
+    });
+    const outstandingPaymentsAmount = outstandingPayments.reduce(function (sum, p) {
+      return sum + (p.amount || 0);
+    }, 0);
+
+    const stageCounts = {};
+    DASHBOARD_STAGE_ORDER.forEach(function (s) {
+      stageCounts[s] = 0;
+    });
+    projects.forEach(function (p) {
+      if (p.stage && stageCounts[p.stage] !== undefined) stageCounts[p.stage] += 1;
+    });
+
+    const pmUsers = userRecords.filter(function (r) {
+      return mapAirtableRoleToAppRole(r.fields && r.fields.Role) === "pm";
+    });
+    const pmWorkload = pmUsers.map(function (userRecord) {
+      const assigned = projects.filter(function (p) {
+        return (p.pmIds || []).indexOf(userRecord.id) !== -1;
+      });
+      const attention = assigned.filter(function (p) {
+        return (tasksByProjectId[p.id] || []).some(isTaskOverdue);
+      });
+      return {
+        id: userRecord.id,
+        name: (userRecord.fields && userRecord.fields["Full Name"]) || null,
+        projectCount: assigned.length,
+        attentionCount: attention.length
+      };
+    });
+
+    return res.json({
+      kpis: {
+        newLeads: newLeadsCount,
+        activeProjects: activeProjects.length,
+        readyToStart: readyToStartProjects.length,
+        pendingClientApprovals: pendingClientApprovalsCount,
+        overdueTasks: overdueTasks.length,
+        outstandingPaymentsAmount: outstandingPaymentsAmount,
+        outstandingPaymentsCount: outstandingPayments.length
+      },
+      activeProjects: activeProjects.map(function (p) {
+        return {
+          id: p.id,
+          name: p.name,
+          client: p.client,
+          pmName: pmNameFor(p),
+          stage: p.stage,
+          progress: p.progress,
+          deadline: p.deadline,
+          status: p.status
+        };
+      }),
+      readyToStart: readyToStartProjects.map(function (p) {
+        return {
+          id: p.id,
+          name: p.name,
+          client: p.client,
+          firstPaymentStatus: firstPaymentStatusFor(p.id)
+        };
+      }),
+      projectsByStage: DASHBOARD_STAGE_ORDER.map(function (s) {
+        return { stage: s, count: stageCounts[s] };
+      }),
+      pmWorkload: pmWorkload
+    });
+  } catch (err) {
+    console.error("[backend] Failed to compute Admin Dashboard data:", err);
+    return res.status(502).json({
+      error: "Could not compute Admin Dashboard data from Airtable.",
+      airtableStatus: err.airtableStatus,
+      airtableError: err.airtableError,
+      details: err.airtableStatus ? undefined : err.message
+    });
+  }
+});
+
+/* ===== PM Dashboard (2026-09-22c "Connect PM Dashboard to Airtable") =====
+
+   pages/dashboard-pm.html (js/services/dashboard-api.js) -> GET
+   /api/dashboard/pm -> this server -> Airtable REST API (read-only, 3
+   tables: Projects, Tasks, Meetings & Decisions) -> one computed JSON
+   summary, scoped to the AUTHENTICATED PM's own projects only. Requires
+   an authenticated session with role "pm" (requireRole("pm")) — a
+   non-PM session gets a real 403, and there is no userId/pmId query
+   parameter anywhere in this route; the PM is identified purely from
+   req.session.user.id (CLAUDE.md's "never trust a frontend-supplied
+   identity for authorization" rule, same as /api/clients/me).
+
+   Schema facts below are confirmed against the real base via
+   get_table_schema/list_records_for_table, not guessed:
+
+     Projects."Project Manager" is a multipleRecordLinks field to Users
+       (fldKcVyAhuQkBaNlg) — "my projects" = every Project whose
+       pmIds (mapProjectRecord already exposes this, added for the Admin
+       Dashboard task) includes the session's own Airtable user id.
+
+     Tasks.Project (multipleRecordLinks) is how a Task belongs to a
+       Project — there is also a Tasks.Assignee link straight to Users,
+       but CLAUDE.md §4 scopes a PM to "assigned projects only: project
+       team, tasks" (the whole project's tasks, not just tasks personally
+       assigned to the PM), so relevance here is project membership, not
+       Assignee. Tasks.Status options (same 5 as the Admin Dashboard
+       already documented): "Not Started"/"In Progress"/"Waiting"/
+       "Review"/"Completed".
+
+     Meetings & Decisions.Project (multipleRecordLinks) is the same kind
+       of link, used to scope "recent activity" to the PM's own projects
+       — CLAUDE.md §6/§7G: meetings are the project's operational history,
+       not a calendar.
+
+   "Active projects" (KPI + the "My Projects" table) = the PM's own
+   projects excluding Status "Completed"/"Cancelled" (the two Projects.
+   Status options that mean the work itself is over) — every other status
+   (Draft/Ready to Start/In Progress/On Hold) is still something a PM is
+   actively managing. This is also the project set every other number on
+   this endpoint (tasks/upcoming-deadlines) is scoped against.
+
+   "Tasks needing attention" = tasks belonging to one of those active
+   projects, excluding Status "Completed", where Status is "Waiting" or
+   "Review", OR the task is overdue (same isTaskOverdue() the Admin
+   Dashboard already uses). "Overdue tasks" is the subset of those that
+   are actually overdue — matches the mock-data version of this dashboard
+   (js/pages/dashboard-pm.js's old attentionTasks()/kpiOverdueTasks
+   logic), just computed from real records instead of js/data/mock-data.js.
+
+   "Upcoming deadlines" = (active projects whose Deadline falls in the
+   next 7 days) + (relevant, non-completed, non-overdue tasks whose Due
+   Date falls in the next 7 days) — CLAUDE.md's own task text says "keep
+   the calculation simple," so this is a plain count, not two separate
+   KPIs.
+
+   Deliberately NOT surfaced as dashboard UI (documented scope decision,
+   not an oversight): CLAUDE.md's task brief also describes "Pending
+   Client Feedback" and "Pending Approvals" as PM dashboard concepts
+   (both derivable from Projects.Current Stage, the same
+   DASHBOARD_CLIENT_ACTION_STAGES 3-stage set the Admin Dashboard already
+   uses). pages/dashboard-pm.html's existing markup — preserved unchanged
+   per this task's explicit "do not redesign" instruction — has no KPI
+   card or panel for either concept, only "Active Projects"/"Tasks
+   Attention"/"Overdue Tasks"/"Upcoming Deadlines" and the 3 panels below.
+   Adding new cards would be a redesign, so these two are left uncomputed
+   rather than returned as dead JSON fields nothing renders — see the
+   chat report for this task for the full reasoning. */
+
+function requirePmDashboardConfigured(req, res, next) {
+  const missing = [];
+  if (!AIRTABLE_PAT) missing.push("AIRTABLE_PAT");
+  if (!AIRTABLE_BASE_ID) missing.push("AIRTABLE_BASE_ID");
+  if (!AIRTABLE_PROJECTS_TABLE_ID) missing.push("AIRTABLE_PROJECTS_TABLE_ID");
+  if (!AIRTABLE_TASKS_TABLE_ID) missing.push("AIRTABLE_TASKS_TABLE_ID");
+  if (!AIRTABLE_MEETINGS_TABLE_ID) missing.push("AIRTABLE_MEETINGS_TABLE_ID");
+  if (missing.length > 0) {
+    return res.status(503).json({
+      error: "Airtable tables required for the PM Dashboard are not fully configured on this backend.",
+      missingEnvVars: missing
+    });
+  }
+  next();
+}
+
+function mapDashboardMeetingRecord(record) {
+  const fields = record.fields || {};
+  return {
+    id: record.id,
+    projectIds: fields.Project || [],
+    meetingType: airtableSelectName(fields["Meeting Type"]),
+    date: fields.Date || null,
+    summary: fields.Summary || null
+  };
+}
+
+function inNextNDays(dateStr, days) {
+  if (!dateStr) return false;
+  var today = new Date(new Date().toDateString());
+  var horizon = new Date(today);
+  horizon.setDate(horizon.getDate() + days);
+  var d = new Date(dateStr);
+  return d >= today && d <= horizon;
+}
+
+app.get("/api/dashboard/pm", requireAuth, requireRole("pm"), requirePmDashboardConfigured, async function (req, res) {
+  try {
+    const pmId = req.session.user.id;
+
+    const [projectRecords, taskRecords, meetingRecords] = await Promise.all([
+      fetchAllProjectRecords(),
+      fetchAllRecordsGeneric(AIRTABLE_TASKS_TABLE_ID),
+      fetchAllRecordsGeneric(AIRTABLE_MEETINGS_TABLE_ID)
+    ]);
+
+    const allProjects = projectRecords.map(mapProjectRecord);
+    const myProjectsAll = allProjects.filter(function (p) {
+      return (p.pmIds || []).indexOf(pmId) !== -1;
+    });
+    const myProjects = myProjectsAll.filter(function (p) {
+      return p.status !== "Completed" && p.status !== "Cancelled";
+    });
+    const myProjectIds = myProjects.map(function (p) {
+      return p.id;
+    });
+    const projectsById = {};
+    myProjects.forEach(function (p) {
+      projectsById[p.id] = p;
+    });
+
+    function belongsToMyProjects(linkedIds) {
+      return (linkedIds || []).some(function (id) {
+        return myProjectIds.indexOf(id) !== -1;
+      });
+    }
+
+    const tasks = taskRecords
+      .map(mapDashboardTaskRecord)
+      .filter(function (t) {
+        return belongsToMyProjects(t.projectIds);
+      });
+
+    const attentionTasks = tasks.filter(function (t) {
+      if (t.status === "Completed") return false;
+      return t.status === "Waiting" || t.status === "Review" || isTaskOverdue(t);
+    });
+    const overdueTasks = attentionTasks.filter(isTaskOverdue);
+
+    const upcomingProjectDeadlines = myProjects.filter(function (p) {
+      return inNextNDays(p.deadline, 7);
+    });
+    const upcomingTaskDeadlines = tasks.filter(function (t) {
+      return t.status !== "Completed" && !isTaskOverdue(t) && inNextNDays(t.dueDate, 7);
+    });
+
+    const meetings = meetingRecords
+      .map(mapDashboardMeetingRecord)
+      .filter(function (m) {
+        return belongsToMyProjects(m.projectIds);
+      })
+      .sort(function (a, b) {
+        return new Date(b.date || 0) - new Date(a.date || 0);
+      })
+      .slice(0, 10);
+
+    function projectNameFor(linkedIds) {
+      const match = (linkedIds || []).map(function (id) {
+        return projectsById[id];
+      }).filter(Boolean)[0];
+      return match ? match.name : null;
+    }
+
+    function projectIdFor(linkedIds) {
+      const match = (linkedIds || []).filter(function (id) {
+        return projectsById[id];
+      })[0];
+      return match || null;
+    }
+
+    return res.json({
+      kpis: {
+        activeProjects: myProjects.length,
+        tasksNeedingAttention: attentionTasks.length,
+        overdueTasks: overdueTasks.length,
+        upcomingDeadlines: upcomingProjectDeadlines.length + upcomingTaskDeadlines.length
+      },
+      myProjects: myProjects.map(function (p) {
+        return {
+          id: p.id,
+          name: p.name,
+          client: p.client,
+          stage: p.stage,
+          progress: p.progress,
+          deadline: p.deadline,
+          status: p.status
+        };
+      }),
+      attentionTasks: attentionTasks.map(function (t) {
+        return {
+          id: t.id,
+          title: t.title,
+          projectId: projectIdFor(t.projectIds),
+          projectName: projectNameFor(t.projectIds),
+          status: t.status,
+          dueDate: t.dueDate,
+          overdue: isTaskOverdue(t)
+        };
+      }),
+      recentActivity: meetings.map(function (m) {
+        return {
+          id: m.id,
+          projectId: projectIdFor(m.projectIds),
+          projectName: projectNameFor(m.projectIds),
+          meetingType: m.meetingType,
+          date: m.date,
+          summary: m.summary
+        };
+      })
+    });
+  } catch (err) {
+    console.error("[backend] Failed to compute PM Dashboard data:", err);
+    return res.status(502).json({
+      error: "Could not compute PM Dashboard data from Airtable.",
+      airtableStatus: err.airtableStatus,
+      airtableError: err.airtableError,
+      details: err.airtableStatus ? undefined : err.message
+    });
+  }
+});
+
+/* ===== Billing (2026-09-22d "Connect Billing to Airtable") =====
+
+   pages/billing.html (js/services/billing-api.js) -> GET /api/billing ->
+   this server -> Airtable REST API (read-only, 4 tables: Payments,
+   Invoices, Projects, Clients) -> one computed JSON summary. Requires an
+   authenticated Admin session (requireRole("admin")), same as
+   /api/clients and /api/dashboard/admin — Billing is an Admin/CEO-only
+   screen (CLAUDE.md §4/§9's sidebar table has no Billing entry for any
+   other role).
+
+   Both Payments and Invoices tables were EMPTY at the start of this task
+   — 3 realistic test records were created in each via Airtable MCP (not
+   guessed), linked to 3 of the pre-existing Projects/Clients records
+   (PRJ-001/CLI-001, PRJ-002/CLI-002, PRJ-003/CLI-003). Schema confirmed
+   via get_table_schema, not assumed:
+
+     Payments (tblBE8s5TcVgO5fQg): "Payment ID" (primary text), "Projects"
+       (link -> Projects), "Clients" (link -> Clients), "Invoice ID"
+       (link -> Invoices), "Payment Type" (singleSelect: First/Milestone/
+       Final), "Amount" (number), "Status" (singleSelect: Pending/Paid/
+       Overdue), "Due Date" (date), "Paid Date" (date), "Invoice Status"
+       (singleSelect: Processing/Sent/On-Hold/Missing Data — an internal
+       invoice-processing state, deliberately NOT what this endpoint shows
+       as "invoice status", see below), "Notes" (multilineText).
+
+     Invoices (tbltfJG5W43wIAHAz): "InvoiceNumber" (primary text),
+       "ClientID" (link -> Clients), "Amount" (number), "VatAmount"
+       (number, 18% always), "Total" (formula = Amount + VatAmount),
+       "Status" (plain singleLineText, NOT a select — free text), "PdfUrl"
+       (url), "Payments" (link -> Payments, the inverse of Payments'
+       "Invoice ID").
+
+   Row unit = one Payment (the real, empty-until-now table this task was
+   built to prove out), since neither Projects nor Invoices carries a
+   ready-made "total value / received / remaining" trio the way the old
+   mock js/data/mock-data.js project records did — Payments' own Amount +
+   Status is the actual billable line item. Project/Client names are
+   resolved by joining Payments' linked-record ids against Projects/
+   Clients (those links display the linked table's PRIMARY field, which is
+   "Project ID"/"Client ID", e.g. "PRJ-001" — not the human-readable
+   "Project Name"/"Client Name" fields billing.html needs, so this reuses
+   the existing fetchAllProjectRecords()/mapProjectRecord() and a small
+   Clients name lookup rather than trusting the link's own display name).
+
+   "Invoice Status" column = the linked Invoice record's own "Status"
+   field (matches the existing billingFields.invoiceStatus column exactly
+   — the test Invoices were deliberately given the values "Paid"/
+   "Pending"/"Overdue" to fit the SAME invoiceStatus.* vocabulary
+   billing.js already renders via CLAUDE.md §12's status-value English
+   exception), not Payments' own "Invoice Status" select (a different,
+   internal-processing vocabulary that has no existing UI slot on this
+   screen and would need one invented — out of this task's "don't
+   redesign" scope). A Payment with no linked Invoice, or whose linked
+   Invoice's Status text doesn't match one of paid/pending/overdue,
+   renders as a neutral, untranslated fallback client-side rather than
+   inventing a status.
+
+   KPI totals mirror the 5 existing billing.kpi* cards exactly:
+   totalValue/received/pending/overdueAmount are sums of Payments.Amount
+   grouped by Payments.Status (Paid/Pending/Overdue respectively;
+   totalValue is every payment regardless of status) — no due-date-based
+   "is this overdue" guess is needed the way the old mock data required,
+   since Payments.Status already has a real "Overdue" option.
+   "awaitingPaymentProjects" (billing.kpiAwaitingPayment) = count of
+   distinct projects with at least one non-Paid payment, the same
+   per-project meaning the old mock KPI had. */
+
+function requireBillingConfigured(req, res, next) {
+  const missing = [];
+  if (!AIRTABLE_PAT) missing.push("AIRTABLE_PAT");
+  if (!AIRTABLE_BASE_ID) missing.push("AIRTABLE_BASE_ID");
+  if (!AIRTABLE_PAYMENTS_TABLE_ID) missing.push("AIRTABLE_PAYMENTS_TABLE_ID");
+  if (!AIRTABLE_INVOICES_TABLE_ID) missing.push("AIRTABLE_INVOICES_TABLE_ID");
+  if (!AIRTABLE_PROJECTS_TABLE_ID) missing.push("AIRTABLE_PROJECTS_TABLE_ID");
+  if (!AIRTABLE_CLIENTS_TABLE_ID) missing.push("AIRTABLE_CLIENTS_TABLE_ID");
+  if (missing.length > 0) {
+    return res.status(503).json({
+      error: "Airtable tables required for Billing are not fully configured on this backend.",
+      missingEnvVars: missing
+    });
+  }
+  next();
+}
+
+async function fetchAllPaymentRecords() {
+  const records = [];
+  let offset;
+  do {
+    const params = new URLSearchParams();
+    if (AIRTABLE_PAYMENTS_VIEW_ID) params.set("view", AIRTABLE_PAYMENTS_VIEW_ID);
+    if (offset) params.set("offset", offset);
+    const url =
+      "https://api.airtable.com/v0/" + AIRTABLE_BASE_ID + "/" + AIRTABLE_PAYMENTS_TABLE_ID + (params.toString() ? "?" + params.toString() : "");
+    const response = await fetch(url, {
+      headers: { Authorization: "Bearer " + AIRTABLE_PAT }
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(function () {
+        return {};
+      });
+      const error = new Error("Airtable Payments fetch failed: " + response.status);
+      error.airtableStatus = response.status;
+      error.airtableError = body && body.error;
+      throw error;
+    }
+    const body = await response.json();
+    records.push.apply(records, body.records || []);
+    offset = body.offset;
+  } while (offset);
+  return records;
+}
+
+async function fetchAllInvoiceRecords() {
+  const records = [];
+  let offset;
+  do {
+    const params = new URLSearchParams();
+    if (AIRTABLE_INVOICES_VIEW_ID) params.set("view", AIRTABLE_INVOICES_VIEW_ID);
+    if (offset) params.set("offset", offset);
+    const url =
+      "https://api.airtable.com/v0/" + AIRTABLE_BASE_ID + "/" + AIRTABLE_INVOICES_TABLE_ID + (params.toString() ? "?" + params.toString() : "");
+    const response = await fetch(url, {
+      headers: { Authorization: "Bearer " + AIRTABLE_PAT }
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(function () {
+        return {};
+      });
+      const error = new Error("Airtable Invoices fetch failed: " + response.status);
+      error.airtableStatus = response.status;
+      error.airtableError = body && body.error;
+      throw error;
+    }
+    const body = await response.json();
+    records.push.apply(records, body.records || []);
+    offset = body.offset;
+  } while (offset);
+  return records;
+}
+
+function firstLinkedId(links) {
+  return links && links.length > 0 ? links[0] : null;
+}
+
+app.get("/api/billing", requireAuth, requireRole("admin"), requireBillingConfigured, async function (req, res) {
+  try {
+    const [paymentRecords, invoiceRecords, projectRecords, clientRecords] = await Promise.all([
+      fetchAllPaymentRecords(),
+      fetchAllInvoiceRecords(),
+      fetchAllProjectRecords(),
+      fetchAllClientRecords()
+    ]);
+
+    const projectsById = {};
+    projectRecords.map(mapProjectRecord).forEach(function (p) {
+      projectsById[p.id] = p;
+    });
+
+    const clientsById = {};
+    clientRecords.forEach(function (r) {
+      clientsById[r.id] = { name: (r.fields && r.fields["Client Name"]) || null };
+    });
+
+    const invoicesById = {};
+    invoiceRecords.forEach(function (r) {
+      const f = r.fields || {};
+      invoicesById[r.id] = { invoiceNumber: f.InvoiceNumber || null, status: f.Status || null };
+    });
+
+    /* The real Payments table has pre-existing blank placeholder rows
+       (no fields set at all) — same pattern already documented for the
+       Users table (see /api/users/team above). A blank row has no
+       "Payment ID", so that's the filter, same idea as that route's
+       roleKey-must-map filter. */
+    const payments = paymentRecords
+      .filter(function (record) {
+        return !!(record.fields && record.fields["Payment ID"]);
+      })
+      .map(function (record) {
+        const fields = record.fields || {};
+        const projectId = firstLinkedId(fields.Projects);
+        const clientId = firstLinkedId(fields.Clients);
+        const invoiceId = firstLinkedId(fields["Invoice ID"]);
+        const invoice = invoiceId ? invoicesById[invoiceId] : null;
+        return {
+          id: record.id,
+          paymentId: fields["Payment ID"] || null,
+          projectId: projectId,
+          projectName: projectId && projectsById[projectId] ? projectsById[projectId].name : null,
+          clientId: clientId,
+          clientName: clientId && clientsById[clientId] ? clientsById[clientId].name : null,
+          paymentType: airtableSelectName(fields["Payment Type"]),
+          amount: typeof fields.Amount === "number" ? fields.Amount : 0,
+          status: airtableSelectName(fields.Status),
+          dueDate: fields["Due Date"] || null,
+          paidDate: fields["Paid Date"] || null,
+          invoiceNumber: invoice ? invoice.invoiceNumber : null,
+          invoiceStatus: invoice ? invoice.status : null
+        };
+      });
+
+    const received = payments
+      .filter(function (p) {
+        return p.status === "Paid";
+      })
+      .reduce(function (sum, p) {
+        return sum + p.amount;
+      }, 0);
+    const pending = payments
+      .filter(function (p) {
+        return p.status === "Pending";
+      })
+      .reduce(function (sum, p) {
+        return sum + p.amount;
+      }, 0);
+    const overdueAmount = payments
+      .filter(function (p) {
+        return p.status === "Overdue";
+      })
+      .reduce(function (sum, p) {
+        return sum + p.amount;
+      }, 0);
+    const totalValue = payments.reduce(function (sum, p) {
+      return sum + p.amount;
+    }, 0);
+
+    const awaitingPaymentProjectIds = {};
+    payments.forEach(function (p) {
+      if (p.status !== "Paid" && p.projectId) awaitingPaymentProjectIds[p.projectId] = true;
+    });
+
+    return res.json({
+      kpis: {
+        totalValue: totalValue,
+        received: received,
+        pending: pending,
+        overdueAmount: overdueAmount,
+        awaitingPaymentProjects: Object.keys(awaitingPaymentProjectIds).length
+      },
+      payments: payments
+    });
+  } catch (err) {
+    console.error("[backend] Failed to compute Billing data:", err);
+    return res.status(502).json({
+      error: "Could not retrieve billing data from Airtable.",
+      airtableStatus: err.airtableStatus,
+      airtableError: err.airtableError,
+      details: err.airtableStatus ? undefined : err.message
+    });
   }
 });
 

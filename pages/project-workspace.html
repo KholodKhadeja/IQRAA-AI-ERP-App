@@ -42,20 +42,18 @@
     <script src="../js/services/auth.js"></script>
     <script src="../js/data/mock-data.js"></script>
     <script src="../js/services/project-helpers.js"></script>
+    <script src="../js/services/projects-api.js"></script>
     <script>
       (function () {
+        /* 2026-09-21k "Connect Projects to Airtable": the project this id
+           points to is now fetched async (js/pages/project-workspace.js),
+           so the real project name can't be read synchronously here the
+           way the old mock-data version did — window.IQRAA_PAGE_TITLE_KEY
+           shows a "loading" placeholder instead until the fetch resolves
+           and project-workspace.js updates the header title directly. */
         var params = new URLSearchParams(window.location.search);
-        var requestedId = params.get("id");
-        var project = null;
-        if (requestedId) {
-          project = window.IQRAA.data.projects.filter(function (p) {
-            return p.id === requestedId;
-          })[0] || null;
-        } else {
-          project = window.IQRAA.data.projects[0] || null;
-        }
-        window.IQRAA_CURRENT_PROJECT_ID = project ? project.id : null;
-        window.IQRAA_PAGE_TITLE_TEXT = project ? project.name : window.IQRAA.i18n.t("projectWorkspace.notFoundHeading");
+        window.IQRAA_CURRENT_PROJECT_ID = params.get("id");
+        window.IQRAA_PAGE_TITLE_KEY = "projects.loading";
       })();
     </script>
     <script src="../js/workspace-chrome.js"></script>

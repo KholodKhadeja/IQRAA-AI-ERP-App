@@ -1,38 +1,96 @@
-/* Admin Overview content (screens.md §6.1). Renders into the containers
-   already present in pages/dashboard-admin.html; re-renders on language
-   change (same pattern as login.html's flowSteps) since every label here
-   is produced via ns.i18n.t() at render time rather than data-i18n
-   attributes on dynamically-injected markup. The table/stage-summary/
-   activity rendering itself lives in services/project-helpers.js, shared
-   with PM Overview (js/pages/dashboard-pm.js) — this file only computes
-   which projects/activity belong on the Admin view (everything) and wires
-   the "assign PM" interaction. */
+/* Admin Overview content (screens.md §6.1).
+
+   2026-09-22 "Connect Admin Dashboard to Airtable": this page now renders
+   real, live-computed data from js/services/dashboard-api.js (GET
+   /api/dashboard/admin on the existing backend, which reads Leads/
+   Projects/Tasks/Payments/Users from Airtable and returns one aggregated
+   JSON summary) instead of js/data/mock-data.js's data.projects/data.kpis/
+   data.recentActivity/data.projectManagers. A fresh fetch runs every time
+   this page loads (see loadDashboard() below) — nothing is cached client-
+   side across loads, so editing a record in Airtable and reloading this
+   page reflects the change.
+
+   js/data/mock-data.js + js/services/project-helpers.js are still loaded
+   (see pages/dashboard-admin.html) purely for their pure formatting/label
+   helpers that don't depend on mock records — ph.formatDate/formatCurrency/
+   badge/projectLink/airtableStageLabel/airtableStatusBadge — the exact
+   same reuse pattern already established by js/pages/projects.js for the
+   real-data Projects List.
+
+   Known, documented scope limits (not bugs — see backend/server.js's
+   Admin Dashboard section for the full reasoning):
+   - "Recent Activity" has no backing Airtable table in this task's scope
+     (Leads/Projects/Tasks/Payments/Users/Clients/Meetings & Decisions —
+     none of them is an activity log), so that panel always renders its
+     existing empty state rather than continuing to show fake mock
+     activity (CLAUDE.md's "no mock data" rule).
+   - "Assign PM" in the Ready-to-Start table is real UI but not wired to
+     an Airtable write (this task is read-only/GET) — confirming opens the
+     same "not connected yet" note already used by leads.html's Create
+     button (CLAUDE.md §18's external-integration-placeholder convention)
+     instead of silently mutating local state that would vanish on the
+     next real fetch. */
 window.IQRAA = window.IQRAA || {};
 
 (function (ns) {
   document.addEventListener("DOMContentLoaded", function () {
-    var data = ns.data;
     var ph = ns.services.projectHelpers;
-    if (!data || !ph) return;
+    var api = ns.services.dashboardApi;
+    if (!ph || !api) return;
+
+    var SECTION_IDS = [
+      "admin-kpi-grid",
+      "admin-active-projects-body",
+      "admin-stage-summary",
+      "admin-ready-to-start-body",
+      "admin-pm-workload-list"
+    ];
+
+    var PAYMENT_STATUS_TONE = { Paid: "success", Pending: "warning", Overdue: "danger" };
+
+    function paymentStatusBadge(statusLabelText) {
+      if (!statusLabelText) return ph.badge(ns.i18n.t("projectFields.unassigned"), "neutral");
+      return ph.badge(statusLabelText, PAYMENT_STATUS_TONE[statusLabelText] || "neutral");
+    }
 
     function kpiIcon(name) {
       return '<span class="kpi-card__icon" aria-hidden="true">' + ns.icons[name](20) + "</span>";
     }
 
-    function renderKpis() {
-      var active = data.projects.filter(function (p) {
-        return p.status !== "readyToStart";
+    function renderLoading() {
+      SECTION_IDS.forEach(function (id) {
+        var host = document.getElementById(id);
+        if (!host) return;
+        host.innerHTML =
+          '<p class="panel__empty"><span class="btn__spinner" aria-hidden="true">' + ns.icons.loader2(16) + "</span> " +
+          ns.i18n.t("adminOverview.loading") +
+          "</p>";
       });
-      var ready = data.projects.filter(function (p) {
-        return p.status === "readyToStart";
+    }
+
+    function renderError() {
+      SECTION_IDS.forEach(function (id) {
+        var host = document.getElementById(id);
+        if (!host) return;
+        host.innerHTML =
+          '<div class="panel__empty">' +
+          "<p>" + ns.i18n.t("adminOverview.loadError") + "</p>" +
+          '<button type="button" class="btn btn--secondary" data-dashboard-retry>' + ns.i18n.t("adminOverview.retry") + "</button>" +
+          "</div>";
       });
+      document.querySelectorAll("[data-dashboard-retry]").forEach(function (btn) {
+        btn.addEventListener("click", loadDashboard);
+      });
+    }
+
+    function renderKpis(kpis) {
       var items = [
-        { icon: "trendingUp", value: data.kpis.newLeads, labelKey: "adminOverview.kpiNewLeads", href: "leads.html" },
-        { icon: "folder", value: active.length, labelKey: "adminOverview.kpiProjectsInProgress", href: "projects.html" },
-        { icon: "layoutDashboard", value: ready.length, labelKey: "adminOverview.kpiProjectsReadyToStart", href: "projects.html" },
-        { icon: "check", value: data.kpis.pendingApprovals, labelKey: "adminOverview.kpiPendingApprovals" },
-        { icon: "alertTriangle", value: data.kpis.overdueTasks, labelKey: "adminOverview.kpiOverdueTasks" },
-        { icon: "creditCard", value: ph.formatCurrency(ph.billingTotals().pending), labelKey: "adminOverview.kpiOutstandingPayments", href: "billing.html" }
+        { icon: "trendingUp", value: kpis.newLeads, labelKey: "adminOverview.kpiNewLeads", href: "leads.html" },
+        { icon: "folder", value: kpis.activeProjects, labelKey: "adminOverview.kpiProjectsInProgress", href: "projects.html" },
+        { icon: "layoutDashboard", value: kpis.readyToStart, labelKey: "adminOverview.kpiProjectsReadyToStart", href: "projects.html" },
+        { icon: "check", value: kpis.pendingClientApprovals, labelKey: "adminOverview.kpiPendingApprovals" },
+        { icon: "alertTriangle", value: kpis.overdueTasks, labelKey: "adminOverview.kpiOverdueTasks" },
+        { icon: "creditCard", value: ph.formatCurrency(kpis.outstandingPaymentsAmount), labelKey: "adminOverview.kpiOutstandingPayments", href: "billing.html" }
       ];
       document.getElementById("admin-kpi-grid").innerHTML = items
         .map(function (item) {
@@ -49,20 +107,70 @@ window.IQRAA = window.IQRAA || {};
         .join("");
     }
 
-    function renderReadyToStart() {
-      var host = document.getElementById("admin-ready-to-start-body");
-      var projects = data.projects.filter(function (p) {
-        return p.status === "readyToStart";
+    function renderActiveProjects(projects) {
+      var host = document.getElementById("admin-active-projects-body");
+      if (projects.length === 0) {
+        host.innerHTML = '<p class="panel__empty">' + ns.i18n.t("adminOverview.emptyActiveProjects") + "</p>";
+        return;
+      }
+      var head =
+        "<tr>" +
+        "<th>" + ns.i18n.t("projectFields.project") + "</th>" +
+        "<th>" + ns.i18n.t("projectFields.client") + "</th>" +
+        "<th>" + ns.i18n.t("projectFields.pm") + "</th>" +
+        "<th>" + ns.i18n.t("projectFields.stage") + "</th>" +
+        "<th>" + ns.i18n.t("projectFields.progress") + "</th>" +
+        "<th>" + ns.i18n.t("projectFields.deadline") + "</th>" +
+        "<th>" + ns.i18n.t("projectFields.status") + "</th>" +
+        "</tr>";
+      var rows = projects
+        .map(function (p) {
+          return (
+            "<tr>" +
+            '<td data-label="' + ns.i18n.t("projectFields.project") + '">' +
+            '<a class="data-table__primary" href="' + ph.projectLink(p.id) + '">' + (p.name || ns.i18n.t("projectFields.unassigned")) + "</a>" +
+            "</td>" +
+            '<td data-label="' + ns.i18n.t("projectFields.client") + '">' + (p.client || ns.i18n.t("projectFields.unassigned")) + "</td>" +
+            '<td data-label="' + ns.i18n.t("projectFields.pm") + '">' + (p.pmName || ns.i18n.t("projectFields.unassigned")) + "</td>" +
+            '<td data-label="' + ns.i18n.t("projectFields.stage") + '">' + ph.airtableStageLabel(p.stage) + "</td>" +
+            '<td data-label="' + ns.i18n.t("projectFields.progress") + '">' +
+            '<div class="progress-bar"><div class="progress-bar__fill" style="width:' + (p.progress || 0) + '%"></div></div>' +
+            "</td>" +
+            '<td data-label="' + ns.i18n.t("projectFields.deadline") + '">' + ph.formatDate(p.deadline) + "</td>" +
+            '<td data-label="' + ns.i18n.t("projectFields.status") + '">' + ph.airtableStatusBadge(p.status) + "</td>" +
+            "</tr>"
+          );
+        })
+        .join("");
+      host.innerHTML = '<table class="data-table"><thead>' + head + "</thead><tbody>" + rows + "</tbody></table>";
+    }
+
+    function renderStageSummary(projectsByStage) {
+      var host = document.getElementById("admin-stage-summary");
+      var max = 1;
+      projectsByStage.forEach(function (row) {
+        if (row.count > max) max = row.count;
       });
+      host.innerHTML = projectsByStage
+        .map(function (row) {
+          var width = Math.round((row.count / max) * 100);
+          return (
+            '<div class="admin-overview__stage-row">' +
+            '<span class="admin-overview__stage-label">' + ph.airtableStageLabel(row.stage) + "</span>" +
+            '<span class="admin-overview__stage-bar progress-bar"><span class="progress-bar__fill" style="width:' + width + '%"></span></span>' +
+            '<span class="admin-overview__stage-count">' + row.count + "</span>" +
+            "</div>"
+          );
+        })
+        .join("");
+    }
+
+    function renderReadyToStart(projects) {
+      var host = document.getElementById("admin-ready-to-start-body");
       if (projects.length === 0) {
         host.innerHTML = '<p class="panel__empty">' + ns.i18n.t("adminOverview.emptyReadyToStart") + "</p>";
         return;
       }
-      var pmOptions = data.projectManagers
-        .map(function (pm) {
-          return '<option value="' + pm.id + '">' + pm.name + "</option>";
-        })
-        .join("");
       var head =
         "<tr>" +
         "<th>" + ns.i18n.t("projectFields.project") + "</th>" +
@@ -74,20 +182,14 @@ window.IQRAA = window.IQRAA || {};
         .map(function (p) {
           return (
             "<tr>" +
-            '<td data-label="' + ns.i18n.t("projectFields.project") + '">' + p.name + "</td>" +
-            '<td data-label="' + ns.i18n.t("projectFields.client") + '">' + ph.clientName(p.clientId) + "</td>" +
-            '<td data-label="' + ns.i18n.t("projectFields.payment") + '">' + ph.paymentBadge(p.paymentState) + "</td>" +
+            '<td data-label="' + ns.i18n.t("projectFields.project") + '">' + (p.name || ns.i18n.t("projectFields.unassigned")) + "</td>" +
+            '<td data-label="' + ns.i18n.t("projectFields.client") + '">' + (p.client || ns.i18n.t("projectFields.unassigned")) + "</td>" +
+            '<td data-label="' + ns.i18n.t("projectFields.payment") + '">' + paymentStatusBadge(p.firstPaymentStatus) + "</td>" +
             '<td data-label="' + ns.i18n.t("adminOverview.assignPmLabel") + '">' +
-            '<div class="admin-overview__assign-row">' +
-            '<select class="select" data-assign-select="' + p.id + '" aria-label="' + ns.i18n.t("adminOverview.assignPmLabel") + '">' +
-            '<option value="">' + ns.i18n.t("adminOverview.assignPmPlaceholder") + "</option>" +
-            pmOptions +
-            "</select>" +
             '<button type="button" class="btn btn--secondary" data-assign-confirm="' + p.id + '">' +
             ns.icons.userPlus(16) +
             "<span>" + ns.i18n.t("adminOverview.assignPmConfirm") + "</span>" +
             "</button>" +
-            "</div>" +
             "</td>" +
             "</tr>"
           );
@@ -97,37 +199,31 @@ window.IQRAA = window.IQRAA || {};
 
       host.querySelectorAll("[data-assign-confirm]").forEach(function (btn) {
         btn.addEventListener("click", function () {
-          var projectId = btn.getAttribute("data-assign-confirm");
-          var select = host.querySelector('[data-assign-select="' + projectId + '"]');
-          if (!select || !select.value) {
-            if (select) select.focus();
-            return;
-          }
-          assignPm(projectId, select.value);
+          ns.components.modal.open(ns.i18n.t("adminOverview.assignPmLabel"), '<p class="note-text">' + ns.i18n.t("adminOverview.assignPmNotConnected") + "</p>");
         });
       });
     }
 
-    function renderPmWorkload() {
-      document.getElementById("admin-pm-workload-list").innerHTML = data.projectManagers
+    function renderPmWorkload(pmWorkload) {
+      var host = document.getElementById("admin-pm-workload-list");
+      if (pmWorkload.length === 0) {
+        host.innerHTML = '<p class="panel__empty">' + ns.i18n.t("adminOverview.emptyPmWorkload") + "</p>";
+        return;
+      }
+      host.innerHTML = pmWorkload
         .map(function (pm) {
-          var assigned = data.projects.filter(function (p) {
-            return p.pmId === pm.id;
-          });
-          var attention = assigned.filter(function (p) {
-            return p.status === "attention" || p.status === "overdue";
-          });
-          var initial = pm.name.charAt(0).toUpperCase();
+          var name = pm.name || ns.i18n.t("projectFields.unassigned");
+          var initial = name.charAt(0).toUpperCase();
           return (
             '<div class="admin-overview__pm-row">' +
             '<span class="admin-overview__pm-identity">' +
             '<span class="avatar" aria-hidden="true">' + initial + "</span>" +
-            '<span class="admin-overview__pm-name">' + pm.name + "</span>" +
+            '<span class="admin-overview__pm-name">' + name + "</span>" +
             "</span>" +
             '<span class="admin-overview__pm-stats">' +
-            "<span>" + assigned.length + " " + ns.i18n.t("adminOverview.workloadActiveLabel") + "</span>" +
-            (attention.length > 0
-              ? "<span>" + attention.length + " " + ns.i18n.t("adminOverview.workloadAttentionLabel") + "</span>"
+            "<span>" + pm.projectCount + " " + ns.i18n.t("adminOverview.workloadActiveLabel") + "</span>" +
+            (pm.attentionCount > 0
+              ? "<span>" + pm.attentionCount + " " + ns.i18n.t("adminOverview.workloadAttentionLabel") + "</span>"
               : "") +
             "</span>" +
             "</div>"
@@ -136,31 +232,30 @@ window.IQRAA = window.IQRAA || {};
         .join("");
     }
 
-    function assignPm(projectId, pmId) {
-      var project = ph.getProject(projectId);
-      if (!project) return;
-      project.pmId = pmId;
-      project.status = "onTrack";
-      project.stageKey = "specification";
-      project.progress = 0;
-      var deadline = new Date();
-      deadline.setDate(deadline.getDate() + 45);
-      project.deadline = deadline.toISOString().slice(0, 10);
-      renderAll();
+    function renderAll(dashboard) {
+      renderKpis(dashboard.kpis);
+      renderActiveProjects(dashboard.activeProjects);
+      renderStageSummary(dashboard.projectsByStage);
+      renderReadyToStart(dashboard.readyToStart);
+      renderPmWorkload(dashboard.pmWorkload);
+      /* No Airtable table backs "Recent Activity" in this task's scope —
+         always its existing empty state rather than fake mock data. */
+      ph.renderActivityList("admin-activity-list", []);
     }
 
-    function renderAll() {
-      var activeProjects = data.projects.filter(function (p) {
-        return p.status !== "readyToStart";
-      });
-      renderKpis();
-      ph.renderProjectsTable("admin-active-projects-body", activeProjects, "adminOverview.emptyActiveProjects");
-      ph.renderStageSummary("admin-stage-summary", data.projects);
-      renderReadyToStart();
-      renderPmWorkload();
-      ph.renderActivityList("admin-activity-list", data.recentActivity);
+    function loadDashboard() {
+      renderLoading();
+      api
+        .getAdminDashboard()
+        .then(function (dashboard) {
+          renderAll(dashboard);
+        })
+        .catch(function (err) {
+          console.error("[dashboard-admin] Failed to load dashboard data from the backend:", err);
+          renderError();
+        });
     }
 
-    renderAll();
+    loadDashboard();
   });
 })(window.IQRAA);

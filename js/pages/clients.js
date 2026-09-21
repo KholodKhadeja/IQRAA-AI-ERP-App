@@ -1,47 +1,71 @@
 /* Clients List + Details (screens.md §8). Details is the shared modal
    component, not a dedicated page — same rationale as js/pages/leads.js.
-   "Active projects" / "completed projects" counts are derived from
-   data.projects at render time, not stored on the client record, so they
-   can never drift out of sync with the actual project data. */
+
+   2026-09-22b "Connect Clients to Airtable": this list now renders real
+   records from js/services/clients-api.js (GET /api/clients on the
+   existing backend, Admin-only — see backend/server.js) instead of
+   js/data/mock-data.js's data.clients. A fresh fetch runs every time this
+   page loads, and Active/Completed project counts are derived
+   server-side from the real Clients->Projects linked-record relationship
+   (the existing Airtable relationship, not a new one) so they can never
+   drift out of sync with real project data.
+
+   Known scope limits (documented, not bugs): the real Clients table has
+   no dedicated "contact person" field, no Status field, and no "last
+   activity" field — the mock data this replaced invented all three.
+   "Contact" shows a placeholder in both the list and the details view;
+   Organization (a real field) is shown in the details view instead,
+   in the same visual slot the mock "contact name" row used to occupy. */
 window.IQRAA = window.IQRAA || {};
 
 (function (ns) {
   document.addEventListener("DOMContentLoaded", function () {
-    var data = ns.data;
     var ph = ns.services.projectHelpers;
-    if (!data || !ph) return;
+    var api = ns.services.clientsApi;
+    if (!ph || !api) return;
 
+    var PLACEHOLDER = "—";
     var searchInput = document.getElementById("clients-search");
+    var allClients = [];
 
-    function projectsForClient(clientId) {
-      return data.projects.filter(function (p) {
-        return p.clientId === clientId;
-      });
+    function renderLoading() {
+      document.getElementById("clients-list-body").innerHTML =
+        '<p class="panel__empty"><span class="btn__spinner" aria-hidden="true">' + ns.icons.loader2(16) + "</span> " +
+        ns.i18n.t("clients.loading") +
+        "</p>";
+    }
+
+    function renderError() {
+      document.getElementById("clients-list-body").innerHTML =
+        '<div class="panel__empty">' +
+        "<p>" + ns.i18n.t("clients.loadError") + "</p>" +
+        '<button type="button" class="btn btn--secondary" id="clients-retry-btn">' + ns.i18n.t("clients.retry") + "</button>" +
+        "</div>";
+      var retryBtn = document.getElementById("clients-retry-btn");
+      if (retryBtn) retryBtn.addEventListener("click", loadClients);
     }
 
     function matchesFilters(client) {
       var query = searchInput.value.trim().toLowerCase();
-      return !query || client.name.toLowerCase().indexOf(query) !== -1 || client.contactName.toLowerCase().indexOf(query) !== -1;
+      if (!query) return true;
+      var name = (client.name || "").toLowerCase();
+      var org = (client.organization || "").toLowerCase();
+      return name.indexOf(query) !== -1 || org.indexOf(query) !== -1;
     }
 
     function openClientDetails(client) {
-      var projects = projectsForClient(client.id);
-      var active = projects.filter(function (p) {
-        return p.status !== "readyToStart";
-      });
-
       var projectsHtml =
-        projects.length === 0
+        client.projects.length === 0
           ? '<p class="panel__empty">' + ns.i18n.t("clients.noProjects") + "</p>"
           : "<div>" +
-            projects
+            client.projects
               .map(function (p) {
                 return (
                   '<div class="list-row">' +
                   '<span class="list-row__title">' +
-                  '<a class="data-table__primary" href="' + ph.projectLink(p.id) + '">' + p.name + "</a>" +
+                  '<a class="data-table__primary" href="' + ph.projectLink(p.id) + '">' + (p.name || PLACEHOLDER) + "</a>" +
                   "</span>" +
-                  ph.statusBadge(p.status) +
+                  ph.airtableStatusBadge(p.status) +
                   "</div>"
                 );
               })
@@ -50,32 +74,32 @@ window.IQRAA = window.IQRAA || {};
 
       var body =
         '<div class="field-row">' +
-        '<span class="field-row__label">' + ns.i18n.t("clientFields.contact") + "</span>" +
-        '<span class="field-row__value">' + client.contactName + "</span>" +
+        '<span class="field-row__label">' + ns.i18n.t("clientFields.organization") + "</span>" +
+        '<span class="field-row__value">' + (client.organization || PLACEHOLDER) + "</span>" +
         "</div>" +
         '<div class="field-row">' +
         '<span class="field-row__label">' + ns.i18n.t("clientFields.email") + "</span>" +
-        '<span class="field-row__value">' + client.contactEmail + "</span>" +
+        '<span class="field-row__value">' + (client.email || PLACEHOLDER) + "</span>" +
         "</div>" +
         '<div class="field-row">' +
         '<span class="field-row__label">' + ns.i18n.t("clientFields.phone") + "</span>" +
-        '<span class="field-row__value">' + client.contactPhone + "</span>" +
+        '<span class="field-row__value">' + (client.phone || PLACEHOLDER) + "</span>" +
         "</div>" +
         '<div class="field-row">' +
         '<span class="field-row__label">' + ns.i18n.t("clientFields.activeProjects") + "</span>" +
-        '<span class="field-row__value">' + active.length + "</span>" +
+        '<span class="field-row__value">' + client.activeProjects + "</span>" +
         "</div>" +
         '<div class="field-row">' +
         '<span class="field-row__label">' + ns.i18n.t("clients.relatedProjectsHeading") + "</span>" +
         projectsHtml +
         "</div>";
 
-      ns.components.modal.open(client.name, body);
+      ns.components.modal.open(client.name || PLACEHOLDER, body);
     }
 
     function renderTable() {
       var host = document.getElementById("clients-list-body");
-      var clients = data.clients.filter(matchesFilters);
+      var clients = allClients.filter(matchesFilters);
       if (clients.length === 0) {
         host.innerHTML = '<p class="panel__empty">' + ns.i18n.t("clients.emptyResults") + "</p>";
         return;
@@ -90,22 +114,15 @@ window.IQRAA = window.IQRAA || {};
         "</tr>";
       var rows = clients
         .map(function (client) {
-          var projects = projectsForClient(client.id);
-          var active = projects.filter(function (p) {
-            return p.status !== "readyToStart" && p.status !== "completed";
-          });
-          var completed = projects.filter(function (p) {
-            return p.status === "completed";
-          });
           return (
             "<tr>" +
             '<td data-label="' + ns.i18n.t("projectFields.client") + '">' +
-            '<button type="button" class="data-table__primary" data-client-open="' + client.id + '">' + client.name + "</button>" +
+            '<button type="button" class="data-table__primary" data-client-open="' + client.id + '">' + (client.name || PLACEHOLDER) + "</button>" +
             "</td>" +
-            '<td data-label="' + ns.i18n.t("clientFields.contact") + '">' + client.contactName + "</td>" +
-            '<td data-label="' + ns.i18n.t("clientFields.email") + '">' + client.contactEmail + "</td>" +
-            '<td data-label="' + ns.i18n.t("clientFields.activeProjects") + '">' + active.length + "</td>" +
-            '<td data-label="' + ns.i18n.t("clientFields.completedProjects") + '">' + completed.length + "</td>" +
+            '<td data-label="' + ns.i18n.t("clientFields.contact") + '">' + PLACEHOLDER + "</td>" +
+            '<td data-label="' + ns.i18n.t("clientFields.email") + '">' + (client.email || PLACEHOLDER) + "</td>" +
+            '<td data-label="' + ns.i18n.t("clientFields.activeProjects") + '">' + client.activeProjects + "</td>" +
+            '<td data-label="' + ns.i18n.t("clientFields.completedProjects") + '">' + client.completedProjects + "</td>" +
             "</tr>"
           );
         })
@@ -114,7 +131,7 @@ window.IQRAA = window.IQRAA || {};
 
       host.querySelectorAll("[data-client-open]").forEach(function (btn) {
         btn.addEventListener("click", function () {
-          var client = data.clients.filter(function (c) {
+          var client = allClients.filter(function (c) {
             return c.id === btn.getAttribute("data-client-open");
           })[0];
           if (client) openClientDetails(client);
@@ -122,7 +139,21 @@ window.IQRAA = window.IQRAA || {};
       });
     }
 
+    function loadClients() {
+      renderLoading();
+      api
+        .getClients()
+        .then(function (clients) {
+          allClients = clients;
+          renderTable();
+        })
+        .catch(function (err) {
+          console.error("[clients] Failed to load clients from the backend:", err);
+          renderError();
+        });
+    }
+
     searchInput.addEventListener("input", renderTable);
-    renderTable();
+    loadClients();
   });
 })(window.IQRAA);

@@ -111,14 +111,10 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: 85% center;
-  /* Source photo has a lot of inherent left-side whitespace (a portfolio-
-     style label) that object-position alone can't crop past, since the
-     source's own aspect ratio is too close to this box's — scale past it
-     instead, clipped by the frame wrapper's overflow:hidden above. */
-  transform: scale(1.55);
-  transform-origin: 78% center;
-  filter: saturate(0.82);
+  /* Source photo (16:9) is wider than this frame, so object-fit:cover only
+     crops left/right, never top/bottom — center keeps the subject's face
+     (upper-middle of the source) fully inside the frame either way. */
+  object-position: center;
 }
 
 .landing-hero-caption {

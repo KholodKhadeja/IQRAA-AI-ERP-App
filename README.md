@@ -34,10 +34,14 @@ Calendar, and Outlook Calendar integration among them).
 
 ## Getting started
 
+There's no root `package.json`/install step — this folder is exactly the
+static site (`index.html` + `pages/` + `css/` + `js/` + `src/`), and its two
+dev-tooling commands run as bare `npx` invocations that fetch what they need
+on demand:
+
 ```bash
-npm install
-npm run dev    # serve the site statically on http://localhost:3000
-npm run lint   # run oxlint against js/
+npx --yes serve .   # serve the site statically on http://localhost:3000
+npx oxlint js        # run oxlint against js/
 ```
 
 Every page still opens directly as a `file://` URL with no server at all —
@@ -81,7 +85,7 @@ Login is real: `pages/login.html` authenticates against Airtable through
 see [Authentication](#authentication) below). Start the backend first
 (`cd backend && npm install && cp .env.example .env` — fill in
 `AIRTABLE_PAT` — `&& npm start`, listening on `http://localhost:3001`),
-then serve the frontend as usual (`npm run dev`, `http://localhost:3000`)
+then serve the frontend as usual (`npx --yes serve .`, `http://localhost:3000`)
 and sign in with a real Users-table account. On success it redirects to
 that user's role dashboard; on failure it shows a generic error (the
 backend deliberately never reveals *why* a login failed — unknown email,

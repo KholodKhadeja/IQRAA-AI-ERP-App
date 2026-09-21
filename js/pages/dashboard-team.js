@@ -1,22 +1,44 @@
 /* Team Member "My Workspace" (screens.md §17). Answers "what do I need to
    do?" — a compact focus list (today's + overdue tasks), not the full
    sortable list that js/pages/my-tasks.js provides. Reuses the same
-   ph.renderProjectsTable/renderActivityList as Admin/PM Overview, filtered
-   to the demo-logged-in team member (data.currentTeamMemberId). */
+   ph.renderProjectsTable/renderActivityList as Admin/PM Overview.
+
+   2026-09-22 "Connect Team pages to Airtable": the current user is now
+   the REAL authenticated session user (ns.workspaceAuthReady, resolved
+   from GET /api/auth/me by js/workspace-chrome.js — the same session
+   check that already gates access to this page, reused here rather than
+   a second auth call), not the hardcoded data.currentTeamMemberId mock
+   identity. A Team Member can no longer see someone else's mock
+   "assigned to me" data just because the JS happened to hardcode a
+   fixed id — this page now always scopes to whoever is actually logged
+   in.
+
+   Known scope limit (documented, not a bug): data.tasks/data.projects
+   are still the mock dataset from js/data/mock-data.js — Tasks/Projects
+   aren't wired to real Airtable Users yet (that's a separate, larger
+   task per CLAUDE.md's "don't build a new data architecture" guidance).
+   Since the mock records are keyed by fake "tm-N" ids that don't match
+   any real Airtable session id, every KPI/focus/project/activity section
+   below will correctly show empty for a real logged-in user until a
+   future task links real Tasks/Projects to real Users — that's the
+   honest result of scoping to the real session, not a bug to "fix" by
+   reintroducing a hardcoded id. */
 window.IQRAA = window.IQRAA || {};
 
 (function (ns) {
-  document.addEventListener("DOMContentLoaded", function () {
+  ns.workspaceAuthReady.then(function (session) {
     var data = ns.data;
     var ph = ns.services.projectHelpers;
     if (!data || !ph) return;
 
-    var myProjects = ph.projectsForTeamMember(data.currentTeamMemberId);
+    var currentUserId = session.user.id;
+
+    var myProjects = ph.projectsForTeamMember(currentUserId);
     var myProjectIds = myProjects.map(function (p) {
       return p.id;
     });
     var myTasks = data.tasks.filter(function (t) {
-      return t.assigneeId === data.currentTeamMemberId;
+      return t.assigneeId === currentUserId;
     });
 
     function isToday(iso) {

@@ -1,32 +1,62 @@
-/* Billing Overview + Payments (screens.md §19). Totals come from
-   ph.billingTotals(), the same computation Admin Overview's "Outstanding
-   Payments" KPI uses, so the two screens can't disagree (CLAUDE.md §9).
-   The "first payment received → Ready to Start" business rule (CLAUDE.md
-   §10) is already enforced in js/pages/dashboard-admin.js's "assign PM"
-   flow — this screen just makes each project's payment state visible,
-   it doesn't re-implement that rule. */
+/* Billing Overview + Payments (screens.md §19).
+
+   2026-09-22d "Connect Billing to Airtable": this screen now renders real
+   records from js/services/billing-api.js (GET /api/billing on the
+   existing backend, Admin-only — see backend/server.js) instead of
+   js/data/mock-data.js's data.projects/ph.billingTotals(). A fresh fetch
+   runs every time this page loads — see billing-api.js.
+
+   Row unit changed from "one row per project" (the old mock shape, which
+   had ready-made totalValue/received/invoiceDueDate fields on each mock
+   project) to "one row per Payment" — the real Payments table is the
+   actual billable line item, and Projects/Clients in Airtable carry no
+   such totals. Total Value/Received/Remaining columns are all derived
+   from that single payment's own Amount + Status; Invoice Status comes
+   from the linked Invoice record's own Status field. See backend/
+   server.js's "Billing" section for the full field-mapping rationale. */
 window.IQRAA = window.IQRAA || {};
 
 (function (ns) {
   document.addEventListener("DOMContentLoaded", function () {
-    var data = ns.data;
     var ph = ns.services.projectHelpers;
-    if (!data || !ph) return;
+    var api = ns.services.billingApi;
+    if (!ph || !api) return;
+
+    var PLACEHOLDER = "—";
+    var INVOICE_STATUS_TONE = { paid: "success", pending: "warning", overdue: "danger" };
+
+    var billingData = null;
 
     function kpiIcon(name) {
       return '<span class="kpi-card__icon" aria-hidden="true">' + ns.icons[name](20) + "</span>";
     }
 
+    function renderLoading() {
+      document.getElementById("billing-kpi-grid").innerHTML = "";
+      document.getElementById("billing-list-body").innerHTML =
+        '<p class="panel__empty"><span class="btn__spinner" aria-hidden="true">' + ns.icons.loader2(16) + "</span> " +
+        ns.i18n.t("billing.loading") +
+        "</p>";
+    }
+
+    function renderError() {
+      document.getElementById("billing-kpi-grid").innerHTML = "";
+      document.getElementById("billing-list-body").innerHTML =
+        '<div class="panel__empty">' +
+        "<p>" + ns.i18n.t("billing.loadError") + "</p>" +
+        '<button type="button" class="btn btn--secondary" id="billing-retry-btn">' + ns.i18n.t("billing.retry") + "</button>" +
+        "</div>";
+      var retryBtn = document.getElementById("billing-retry-btn");
+      if (retryBtn) retryBtn.addEventListener("click", loadBilling);
+    }
+
     function renderKpis() {
-      var totals = ph.billingTotals();
-      var awaitingPayment = data.projects.filter(function (p) {
-        return (p.received || 0) < (p.totalValue || 0);
-      }).length;
+      var kpis = billingData.kpis;
       var items = [
-        { icon: "creditCard", value: ph.formatCurrency(totals.totalValue), labelKey: "billing.kpiTotalValue" },
-        { icon: "check", value: ph.formatCurrency(totals.received), labelKey: "billing.kpiReceived" },
-        { icon: "clock", value: ph.formatCurrency(totals.pending), labelKey: "billing.kpiPending" },
-        { icon: "alertTriangle", value: ph.formatCurrency(totals.overdueAmount), labelKey: "billing.kpiOverdue" }
+        { icon: "creditCard", value: ph.formatCurrency(kpis.totalValue), labelKey: "billing.kpiTotalValue" },
+        { icon: "check", value: ph.formatCurrency(kpis.received), labelKey: "billing.kpiReceived" },
+        { icon: "clock", value: ph.formatCurrency(kpis.pending), labelKey: "billing.kpiPending" },
+        { icon: "alertTriangle", value: ph.formatCurrency(kpis.overdueAmount), labelKey: "billing.kpiOverdue" }
       ];
       document.getElementById("billing-kpi-grid").innerHTML = items
         .map(function (item) {
@@ -38,12 +68,25 @@ window.IQRAA = window.IQRAA || {};
             "</div>"
           );
         })
-        .join("") + '<div class="kpi-card"><span class="kpi-card__value">' + awaitingPayment + "</span>" +
+        .join("") + '<div class="kpi-card"><span class="kpi-card__value">' + kpis.awaitingPaymentProjects + "</span>" +
         '<span class="kpi-card__label">' + ns.i18n.t("billing.kpiAwaitingPayment") + "</span></div>";
+    }
+
+    function invoiceStatusBadge(payment) {
+      var key = (payment.invoiceStatus || "").trim().toLowerCase();
+      if (INVOICE_STATUS_TONE[key]) {
+        return ph.badge(ns.i18n.t("invoiceStatus." + key), INVOICE_STATUS_TONE[key]);
+      }
+      return ph.badge(payment.invoiceStatus || PLACEHOLDER, "neutral");
     }
 
     function renderTable() {
       var host = document.getElementById("billing-list-body");
+      var payments = billingData.payments;
+      if (payments.length === 0) {
+        host.innerHTML = '<p class="panel__empty">' + ns.i18n.t("billing.emptyResults") + "</p>";
+        return;
+      }
       var head =
         "<tr>" +
         "<th>" + ns.i18n.t("projectFields.project") + "</th>" +
@@ -53,17 +96,21 @@ window.IQRAA = window.IQRAA || {};
         "<th>" + ns.i18n.t("billingFields.remaining") + "</th>" +
         "<th>" + ns.i18n.t("billingFields.invoiceStatus") + "</th>" +
         "</tr>";
-      var rows = data.projects
+      var rows = payments
         .map(function (p) {
-          var remaining = (p.totalValue || 0) - (p.received || 0);
+          var received = p.status === "Paid" ? p.amount : 0;
+          var remaining = p.status === "Paid" ? 0 : p.amount;
+          var projectCell = p.projectId
+            ? '<a class="data-table__primary" href="' + ph.projectLink(p.projectId) + '">' + (p.projectName || PLACEHOLDER) + "</a>"
+            : (p.projectName || PLACEHOLDER);
           return (
             "<tr>" +
-            '<td data-label="' + ns.i18n.t("projectFields.project") + '"><a class="data-table__primary" href="' + ph.projectLink(p.id) + '">' + p.name + "</a></td>" +
-            '<td data-label="' + ns.i18n.t("projectFields.client") + '">' + ph.clientName(p.clientId) + "</td>" +
-            '<td data-label="' + ns.i18n.t("billingFields.totalValue") + '">' + ph.formatCurrency(p.totalValue || 0) + "</td>" +
-            '<td data-label="' + ns.i18n.t("billingFields.received") + '">' + ph.formatCurrency(p.received || 0) + "</td>" +
+            '<td data-label="' + ns.i18n.t("projectFields.project") + '">' + projectCell + "</td>" +
+            '<td data-label="' + ns.i18n.t("projectFields.client") + '">' + (p.clientName || PLACEHOLDER) + "</td>" +
+            '<td data-label="' + ns.i18n.t("billingFields.totalValue") + '">' + ph.formatCurrency(p.amount) + "</td>" +
+            '<td data-label="' + ns.i18n.t("billingFields.received") + '">' + ph.formatCurrency(received) + "</td>" +
             '<td data-label="' + ns.i18n.t("billingFields.remaining") + '">' + ph.formatCurrency(remaining) + "</td>" +
-            '<td data-label="' + ns.i18n.t("billingFields.invoiceStatus") + '">' + ph.invoiceStatusBadge(p) + "</td>" +
+            '<td data-label="' + ns.i18n.t("billingFields.invoiceStatus") + '">' + invoiceStatusBadge(p) + "</td>" +
             "</tr>"
           );
         })
@@ -76,6 +123,20 @@ window.IQRAA = window.IQRAA || {};
       renderTable();
     }
 
-    renderAll();
+    function loadBilling() {
+      renderLoading();
+      api
+        .getBilling()
+        .then(function (body) {
+          billingData = body;
+          renderAll();
+        })
+        .catch(function (err) {
+          console.error("[billing] Failed to load billing data from the backend:", err);
+          renderError();
+        });
+    }
+
+    loadBilling();
   });
 })(window.IQRAA);

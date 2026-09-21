@@ -416,6 +416,117 @@ IQRAA.services.projectHelpers = (function (ns) {
       .join("");
   }
 
+  /* ===== Real, Airtable-backed projects (2026-09-21k) =====
+
+     js/data/mock-data.js's data.projects stays the mock dataset every
+     other screen (Admin/PM Overview, Billing, etc.) still reads — out of
+     this task's scope to touch. Projects List + Project Workspace now
+     additionally render real records from js/services/projects-api.js,
+     shaped differently (id is a real Airtable record id, client/status/
+     stage are plain label strings, no pmId/clientId/teamIds to look up
+     against the mock projectManagers/clients/teamMembers arrays) — these
+     helpers render that shape without touching the functions above, which
+     stay exactly as every existing mock-data screen expects them. */
+
+  /* Airtable's "Current Stage" single-select options, mapped to this
+     app's existing pipelineStages keys (js/data/mock-data.js) so
+     pipelineStepperHtml() below can render a real project's stage with
+     the exact same stepper every mock project already uses. Confirmed via
+     get_table_schema against the real Projects table: all 10 real options
+     match 10 of the 11 mock stage keys one-to-one, in the same order —
+     the one mock key with no Airtable equivalent is "qa2" (mock's second,
+     post-Changes QA pass has no matching Airtable stage; "QA" always maps
+     to "qa1", the first/primary QA stage). */
+  var AIRTABLE_STAGE_LABEL_TO_KEY = {
+    Specification: "specification",
+    Script: "script",
+    "Client Script Approval": "clientScriptApproval",
+    Design: "design",
+    Production: "production",
+    QA: "qa1",
+    "Client Review": "clientReview",
+    Changes: "changes",
+    "Client Approval": "clientApproval",
+    Publication: "publication"
+  };
+
+  function airtableStageKey(stageLabelText) {
+    return AIRTABLE_STAGE_LABEL_TO_KEY[stageLabelText] || null;
+  }
+
+  /* Airtable's real "Status" options (Draft/Ready to Start/In Progress/On
+     Hold/Completed/Cancelled) are a 6-option project-lifecycle vocabulary
+     that doesn't map 1:1 onto the mock system's 4-key status.* (onTrack/
+     attention/overdue/readyToStart — see CLAUDE.md §12's status/concept
+     English-values exception). Rather than force an inaccurate mapping,
+     real projects show Airtable's own label directly (already English,
+     consistent with that same §12 exception) through this dedicated tone
+     table instead of ph.statusBadge()/STATUS_TONE above. */
+  var AIRTABLE_STATUS_TONE = {
+    Draft: "neutral",
+    "Ready to Start": "info",
+    "In Progress": "success",
+    "On Hold": "warning",
+    Completed: "success",
+    Cancelled: "danger"
+  };
+
+  function airtableStatusBadge(statusLabelText) {
+    if (!statusLabelText) return badge(ns.i18n.t("projectFields.unassigned"), "neutral");
+    return badge(statusLabelText, AIRTABLE_STATUS_TONE[statusLabelText] || "neutral");
+  }
+
+  function airtableStageLabel(stageLabelText) {
+    var key = airtableStageKey(stageLabelText);
+    return key ? stageLabel(key) : ns.i18n.t("projectFields.unassigned");
+  }
+
+  /* Same 7-column markup/CSS as renderProjectsTable() above (visually
+     identical — same .data-table/.progress-bar/.badge classes, same
+     column order) so the real-data Projects List looks pixel-identical to
+     the mock-data version it replaces; only the field access differs
+     since these records don't have clientId/pmId to look up. Project
+     Manager always reads "Unassigned" — see the file-header comment on
+     why that's not resolved from Airtable here. */
+  function renderRealProjectsTable(containerId, projects, emptyKey) {
+    var host = document.getElementById(containerId);
+    if (!host) return;
+    if (projects.length === 0) {
+      host.innerHTML = '<p class="panel__empty">' + ns.i18n.t(emptyKey) + "</p>";
+      return;
+    }
+    var head =
+      "<tr>" +
+      "<th>" + ns.i18n.t("projectFields.project") + "</th>" +
+      "<th>" + ns.i18n.t("projectFields.client") + "</th>" +
+      "<th>" + ns.i18n.t("projectFields.pm") + "</th>" +
+      "<th>" + ns.i18n.t("projectFields.stage") + "</th>" +
+      "<th>" + ns.i18n.t("projectFields.progress") + "</th>" +
+      "<th>" + ns.i18n.t("projectFields.deadline") + "</th>" +
+      "<th>" + ns.i18n.t("projectFields.status") + "</th>" +
+      "</tr>";
+    var rows = projects
+      .map(function (p) {
+        return (
+          "<tr>" +
+          '<td data-label="' + ns.i18n.t("projectFields.project") + '">' +
+          '<a class="data-table__primary" href="' + projectLink(p.id) + '">' + (p.name || ns.i18n.t("projectFields.unassigned")) + "</a>" +
+          "</td>" +
+          '<td data-label="' + ns.i18n.t("projectFields.client") + '">' + (p.client || ns.i18n.t("projectFields.unassigned")) + "</td>" +
+          '<td data-label="' + ns.i18n.t("projectFields.pm") + '">' + ns.i18n.t("projectFields.unassigned") + "</td>" +
+          '<td data-label="' + ns.i18n.t("projectFields.stage") + '">' + airtableStageLabel(p.stage) + "</td>" +
+          '<td data-label="' + ns.i18n.t("projectFields.progress") + '">' +
+          '<div class="progress-bar"><div class="progress-bar__fill" style="width:' + (p.progress || 0) + '%"></div></div>' +
+          "</td>" +
+          '<td data-label="' + ns.i18n.t("projectFields.deadline") + '">' + formatDate(p.deadline) + "</td>" +
+          '<td data-label="' + ns.i18n.t("projectFields.status") + '">' + airtableStatusBadge(p.status) + "</td>" +
+          "</tr>"
+        );
+      })
+      .join("");
+    host.innerHTML = '<table class="data-table"><thead>' + head + "</thead><tbody>" + rows + "</tbody></table>";
+  }
+
   return {
     STATUS_TONE: STATUS_TONE,
     PAYMENT_TONE: PAYMENT_TONE,
@@ -454,6 +565,10 @@ IQRAA.services.projectHelpers = (function (ns) {
     renderStageSummary: renderStageSummary,
     renderActivityList: renderActivityList,
     renderTaskBoard: renderTaskBoard,
-    renderMeetingsList: renderMeetingsList
+    renderMeetingsList: renderMeetingsList,
+    airtableStageKey: airtableStageKey,
+    airtableStageLabel: airtableStageLabel,
+    airtableStatusBadge: airtableStatusBadge,
+    renderRealProjectsTable: renderRealProjectsTable
   };
 })(window.IQRAA);

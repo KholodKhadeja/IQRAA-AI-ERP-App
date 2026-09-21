@@ -21,7 +21,15 @@ window.IQRAA = window.IQRAA || {};
 
 IQRAA.services = IQRAA.services || {};
 IQRAA.services.auth = (function () {
-  var AUTH_API_BASE = "http://localhost:3001";
+  /* Local dev (or a page opened via file://) hits the local backend from
+     backend/README.md; anywhere else (the deployed static site) hits the
+     deployed backend service (render.yaml). Without this branch a
+     deployed page would try to reach a loopback address from a public
+     origin, which browsers refuse (Private Network Access) even before
+     CORS is considered. */
+  var AUTH_API_BASE = /^(localhost|127\.0\.0\.1)?$/.test(window.location.hostname)
+    ? "http://localhost:3001"
+    : "https://iqraa-erp-backend.onrender.com";
 
   function login(credentials) {
     return fetch(AUTH_API_BASE + "/api/auth/login", {

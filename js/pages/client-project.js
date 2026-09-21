@@ -1,38 +1,65 @@
 /* Client Project View (screens.md §23) — the client-safe counterpart to
-   Project Workspace. Deliberately does NOT reuse project-workspace.js's
-   render: no task board, no team roster, no internal history — only what
-   CLAUDE.md §4 says a client may see (progress, stage, expected
-   completion, resources, feedback/approval, contact PM). Reuses
-   ph.pipelineStepperHtml() so the client sees the exact same stage
-   stepper as the internal view (stage transparency is explicitly wanted;
-   internal staffing/task detail is not). Approve / Request Changes
-   mutate the shared data.projects record in place — the same real
-   in-memory-mutation pattern used everywhere else in this build — and
-   also append a data.recentActivity entry, so an approval here shows up
-   in Admin Overview's/Project History's activity feed too. */
+   Project Workspace.
+
+   2026-09-22b "Connect Clients to Airtable": this now fetches real data
+   from js/services/clients-api.js's getMyClientProjects()
+   (GET /api/clients/me), fresh on every page load. That endpoint is the
+   security boundary this task required: it derives the caller's
+   authorized project(s) purely from the AUTHENTICATED SESSION's email
+   matched against the Clients table server-side — it never accepts a
+   client- or project-id from this page as input. currentProject() below
+   only ever picks among the projects THAT ENDPOINT ALREADY RETURNED, via
+   the `?id=` URL param — there is no code path that can make the backend
+   fetch a project outside the caller's own authorized set, so changing
+   ?id= in the URL can at most switch between the client's own projects,
+   never reach another client's.
+
+   Deliberately NOT reused from the old mock version: Approve / Request
+   Changes and the feedback form used to mutate js/data/mock-data.js's
+   data.projects/data.clientFeedback in place. There is no Airtable field
+   or table backing approvals or feedback for a project, so continuing to
+   silently mutate an in-memory array now that the PROJECT data itself is
+   real would be actively misleading (CLAUDE.md §18's external-
+   integration-placeholder convention) — both actions now show a "not
+   connected yet" note instead. The approval panel itself still appears
+   when the project's real stage is one that needs client action (stage
+   transparency is real, informative data), only the buttons are inert. */
 window.IQRAA = window.IQRAA || {};
 
 (function (ns) {
   document.addEventListener("DOMContentLoaded", function () {
-    var data = ns.data;
     var ph = ns.services.projectHelpers;
+    var api = ns.services.clientsApi;
     var host = document.getElementById("client-project-content");
-    if (!data || !ph || !host) return;
+    if (!ph || !api || !host) return;
 
-    function currentProjectId() {
-      var params = new URLSearchParams(window.location.search);
-      var requestedId = params.get("id");
-      var myProjects = ph.projectsForClient(data.currentClientId);
-      if (requestedId) {
-        var match = myProjects.filter(function (p) {
-          return p.id === requestedId;
-        })[0];
-        return match ? match.id : null;
-      }
-      return myProjects.length > 0 ? myProjects[0].id : null;
+    var myProjects = [];
+
+    function setHeaderTitle(text) {
+      var titleEl = document.querySelector(".workspace-header__title");
+      if (titleEl) titleEl.textContent = text;
+    }
+
+    function renderLoading() {
+      setHeaderTitle(ns.i18n.t("clientProject.loading"));
+      host.innerHTML =
+        '<p class="panel__empty"><span class="btn__spinner" aria-hidden="true">' + ns.icons.loader2(16) + "</span> " +
+        ns.i18n.t("clientProject.loading") +
+        "</p>";
+    }
+
+    function renderErrorState() {
+      host.innerHTML =
+        '<div class="panel__empty">' +
+        "<p>" + ns.i18n.t("clientProject.loadError") + "</p>" +
+        '<button type="button" class="btn btn--secondary" id="client-project-retry-btn">' + ns.i18n.t("clientProject.retry") + "</button>" +
+        "</div>";
+      var retryBtn = document.getElementById("client-project-retry-btn");
+      if (retryBtn) retryBtn.addEventListener("click", loadAndRender);
     }
 
     function renderNoProjects() {
+      setHeaderTitle(ns.i18n.t("clientProject.noProjectsHeading"));
       host.innerHTML =
         '<section class="panel">' +
         '<h2 class="panel__title">' + ns.i18n.t("clientProject.noProjectsHeading") + "</h2>" +
@@ -40,8 +67,24 @@ window.IQRAA = window.IQRAA || {};
         "</section>";
     }
 
+    function currentProject() {
+      var params = new URLSearchParams(window.location.search);
+      var requestedId = params.get("id");
+      if (requestedId) {
+        return myProjects.filter(function (p) {
+          return p.id === requestedId;
+        })[0] || null;
+      }
+      return myProjects.length > 0 ? myProjects[0] : null;
+    }
+
+    function needsClientAction(project) {
+      var key = ph.airtableStageKey(project.stage);
+      return ["clientScriptApproval", "clientReview", "clientApproval"].indexOf(key) !== -1;
+    }
+
     function renderApproval(project) {
-      if (!ph.needsClientAction(project)) return "";
+      if (!needsClientAction(project)) return "";
       return (
         '<section class="panel">' +
         '<h2 class="panel__title">' + ns.i18n.t("clientProject.approvalHeading") + "</h2>" +
@@ -50,25 +93,16 @@ window.IQRAA = window.IQRAA || {};
         '<button type="button" class="btn btn--primary" id="client-approve-btn">' + ns.i18n.t("clientProject.approveAction") + "</button>" +
         '<button type="button" class="btn btn--secondary" id="client-changes-btn">' + ns.i18n.t("clientProject.requestChangesAction") + "</button>" +
         "</div>" +
+        '<p class="note-text">' + ns.i18n.t("clientProject.writeNotConnected") + "</p>" +
         "</section>"
       );
     }
 
-    function renderFeedback(project) {
-      var entries = data.clientFeedback.filter(function (f) {
-        return f.projectId === project.id;
-      });
-      var listHtml = entries.length
-        ? entries
-            .map(function (f) {
-              return '<p class="project-workspace__summary">' + ph.formatDateTime(f.when) + " — " + f.text + "</p>";
-            })
-            .join("")
-        : '<p class="panel__empty">' + ns.i18n.t("clientProject.feedbackEmpty") + "</p>";
+    function renderFeedback() {
       return (
         '<section class="panel">' +
         '<h2 class="panel__title">' + ns.i18n.t("clientProject.feedbackHeading") + "</h2>" +
-        '<div id="client-feedback-list">' + listHtml + "</div>" +
+        '<p class="panel__empty">' + ns.i18n.t("clientProject.feedbackEmpty") + "</p>" +
         '<form id="client-feedback-form">' +
         '<label class="sr-only" for="client-feedback-text" data-i18n="clientProject.feedbackPlaceholder"></label>' +
         '<textarea id="client-feedback-text" class="text-field__input" rows="3" placeholder="' +
@@ -76,8 +110,8 @@ window.IQRAA = window.IQRAA || {};
         '<div class="modal__actions modal__actions--start">' +
         '<button type="submit" class="btn btn--secondary">' + ns.i18n.t("clientProject.feedbackSubmit") + "</button>" +
         "</div>" +
+        '<p class="note-text">' + ns.i18n.t("clientProject.writeNotConnected") + "</p>" +
         "</form>" +
-        '<p class="note-text" id="client-feedback-thanks" hidden>' + ns.i18n.t("clientProject.feedbackThanks") + "</p>" +
         "</section>"
       );
     }
@@ -88,7 +122,7 @@ window.IQRAA = window.IQRAA || {};
         '<h2 class="panel__title">' + ns.i18n.t("projectWorkspace.resourcesHeading") + "</h2>" +
         '<p class="note-text">' + ns.i18n.t("projectWorkspace.resourcesComingSoon") + "</p>" +
         "<div>" +
-        data.resourceTemplates
+        ns.data.resourceTemplates
           .map(function (resource) {
             return (
               '<div class="list-row">' +
@@ -104,82 +138,57 @@ window.IQRAA = window.IQRAA || {};
       );
     }
 
-    function renderContactPm(project) {
-      var email = ph.pmEmail(project.pmId);
+    function renderContactPm() {
       return (
         '<section class="panel">' +
         '<h2 class="panel__title">' + ns.i18n.t("clientProject.contactPmHeading") + "</h2>" +
-        ph.fieldRow("projectFields.pm", ph.pmName(project.pmId)) +
-        (email
-          ? '<a class="btn btn--secondary" href="mailto:' + email + '">' + ns.i18n.t("clientProject.contactPmEmailAction") + "</a>"
-          : "") +
+        ph.fieldRow("projectFields.pm", ns.i18n.t("projectFields.unassigned")) +
         "</section>"
       );
     }
 
-    function wireApproval(project) {
+    function wirePlaceholderNote() {
       var approveBtn = document.getElementById("client-approve-btn");
       var changesBtn = document.getElementById("client-changes-btn");
-      if (approveBtn) {
-        approveBtn.addEventListener("click", function () {
-          var nextIndex = ph.stageIndex(project.stageKey) + 1;
-          if (nextIndex < data.pipelineStages.length) {
-            project.stageKey = data.pipelineStages[nextIndex].key;
-          }
-          data.recentActivity.unshift({
-            icon: "check",
-            textKey: "activity.deliverableApproved",
-            projectId: project.id,
-            when: new Date().toISOString()
-          });
-          renderAll();
+      var feedbackForm = document.getElementById("client-feedback-form");
+      [approveBtn, changesBtn].forEach(function (btn) {
+        if (btn) btn.addEventListener("click", function () {
+          btn.disabled = true;
         });
-      }
-      if (changesBtn) {
-        changesBtn.addEventListener("click", function () {
-          project.stageKey = "changes";
-          renderAll();
-        });
-      }
-    }
-
-    function wireFeedback(project) {
-      var form = document.getElementById("client-feedback-form");
-      if (!form) return;
-      form.addEventListener("submit", function (event) {
-        event.preventDefault();
-        var textarea = document.getElementById("client-feedback-text");
-        if (!textarea.value.trim()) return;
-        data.clientFeedback.push({ projectId: project.id, text: textarea.value.trim(), when: new Date().toISOString() });
-        document.getElementById("client-feedback-thanks").hidden = false;
-        renderAll();
       });
+      if (feedbackForm) {
+        feedbackForm.addEventListener("submit", function (event) {
+          event.preventDefault();
+        });
+      }
     }
 
     function renderProject(project) {
+      setHeaderTitle(project.name || ns.i18n.t("clientProject.noProjectsHeading"));
+
       var headerHtml =
         '<section class="panel project-workspace__header">' +
-        ph.fieldRow("projectFields.status", ph.statusBadge(project.status)) +
-        ph.fieldRow("projectFields.stage", ph.stageLabel(project.stageKey)) +
+        ph.fieldRow("projectFields.status", ph.airtableStatusBadge(project.status)) +
+        ph.fieldRow("projectFields.stage", ph.airtableStageLabel(project.stage)) +
         ph.fieldRow(
           "projectFields.progress",
           '<span class="project-workspace__header-progress progress-bar"><span class="progress-bar__fill" style="width:' +
-            project.progress +
+            (project.progress || 0) +
             '%"></span></span>'
         ) +
-        ph.fieldRow("projectWorkspace.expectedCompletion", ph.formatDate(project.deadline)) +
+        ph.fieldRow("projectWorkspace.expectedCompletion", ph.formatDate(project.expectedCompletion)) +
         "</section>";
 
       var overviewHtml =
         '<section class="panel">' +
         '<h2 class="panel__title">' + ns.i18n.t("projectWorkspace.overviewHeading") + "</h2>" +
-        '<p class="project-workspace__summary">' + project.summary + "</p>" +
+        '<p class="project-workspace__summary">' + (project.summary || "") + "</p>" +
         "</section>";
 
       var pipelineHtml =
         '<section class="panel">' +
         '<h2 class="panel__title">' + ns.i18n.t("projectWorkspace.pipelineHeading") + "</h2>" +
-        ph.pipelineStepperHtml(project) +
+        ph.pipelineStepperHtml({ stageKey: ph.airtableStageKey(project.stage) }) +
         "</section>";
 
       host.innerHTML =
@@ -189,25 +198,41 @@ window.IQRAA = window.IQRAA || {};
         overviewHtml +
         renderApproval(project) +
         pipelineHtml +
-        renderFeedback(project) +
+        renderFeedback() +
         "</div>" +
-        '<div class="project-workspace__side">' + renderContactPm(project) + renderResources() + "</div>" +
+        '<div class="project-workspace__side">' + renderContactPm() + renderResources() + "</div>" +
         "</div>";
 
-      wireApproval(project);
-      wireFeedback(project);
+      wirePlaceholderNote();
     }
 
-    function renderAll() {
-      var id = currentProjectId();
-      var project = id ? ph.getProject(id) : null;
-      if (!project) {
-        renderNoProjects();
-        return;
-      }
-      renderProject(project);
+    function loadAndRender() {
+      renderLoading();
+      api
+        .getMyClientProjects()
+        .then(function (result) {
+          myProjects = result.projects || [];
+          var project = currentProject();
+          if (!project) {
+            renderNoProjects();
+            return;
+          }
+          renderProject(project);
+        })
+        .catch(function (err) {
+          /* A 403 here means this session isn't linked to any Clients
+             record — treated the same as "no projects" rather than a
+             distinct error, so it never hints at what a different
+             account might see. */
+          if (err && err.status === 403) {
+            renderNoProjects();
+            return;
+          }
+          console.error("[client-project] Failed to load client/project data from the backend:", err);
+          renderErrorState();
+        });
     }
 
-    renderAll();
+    loadAndRender();
   });
 })(window.IQRAA);
