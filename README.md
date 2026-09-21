@@ -49,6 +49,31 @@ still renders, but auth/data calls need `http://localhost:3001` reachable.
 See `CLAUDE.md` §16 for the full verification checklist (lint + pa11y + a
 `file://` check).
 
+## Deploying to Render (Static Site)
+
+This folder is **not** the git repository root — the repo root is one level
+up (`AI_Learning_Operations_ERP/`), which also holds the spec docs, the
+Airtable/n8n folders, and this `WebApp - Learning_Operation_ERP/` folder
+itself. A Render Static Site needs to be told that this subfolder, not the
+repo root, is what to publish — otherwise it can't find `index.html` and
+every relative `css/`/`js/`/`src/` request 404s.
+
+A `render.yaml` Blueprint at the repo root already encodes this. If the
+Render service was created via **New + → Blueprint** pointing at this repo,
+it picks the settings up automatically. If it was instead created as a
+plain manual **Static Site**, set the same two values by hand under that
+service's **Settings**:
+
+- **Root Directory**: `WebApp - Learning_Operation_ERP`
+- **Publish Directory**: `.`
+- **Build Command**: (leave empty — there's no build step, see §Tech stack)
+
+If the deployed site loads but shows console errors and 404s for `css/`,
+`js/`, or `src/` assets, this Root Directory setting is the first thing to
+check — a page that "partially loads" (the raw HTML renders, but every
+script/stylesheet request fails) is the classic symptom of Render serving
+from the wrong directory.
+
 ## Trying the login flow
 
 Login is real: `pages/login.html` authenticates against Airtable through

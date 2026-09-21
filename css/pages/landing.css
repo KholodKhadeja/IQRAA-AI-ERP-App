@@ -34,26 +34,9 @@
   margin: 0;
   color: var(--text);
   font-size: clamp(3.1rem, 7vw, 6.6rem);
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: -0.07em;
   line-height: 0.94;
-}
-
-html[lang="ar"] .landing-hero h1,
-html[lang="ar"] .landing-section-intro h2,
-html[lang="ar"] .landing-workflow-intro h2,
-html[lang="ar"] .landing-erp-grid h2,
-html[lang="ar"] .landing-contact-copy h2 {
-  letter-spacing: normal;
-  line-height: 1.35;
-}
-
-html[lang="he"] .landing-hero h1,
-html[lang="he"] .landing-section-intro h2,
-html[lang="he"] .landing-workflow-intro h2,
-html[lang="he"] .landing-erp-grid h2,
-html[lang="he"] .landing-contact-copy h2 {
-  font-weight: 700;
 }
 
 .landing-hero h1 em,

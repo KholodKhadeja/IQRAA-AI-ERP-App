@@ -77,6 +77,5 @@ window.IQRAA = window.IQRAA || {};
     statusSelect.addEventListener("change", renderTable);
 
     renderAll();
-    ns.i18n.onLanguageChange(renderAll);
   });
 })(window.IQRAA);

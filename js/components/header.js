@@ -28,7 +28,6 @@ IQRAA.components.header = (function (ns) {
       '<ul class="header__nav-list">' + navLinks + "</ul>" +
       "</nav>" +
       '<div class="header__actions">' +
-      '<div id="header-lang-root"></div>' +
       '<a href="' + PATHS.pages + 'login.html" class="btn btn--secondary" data-i18n="header.login"></a>' +
       '<a href="' + PATHS.root + 'index.html#contact" class="btn btn--primary" data-i18n="header.talkToUs"></a>' +
       "</div>" +
@@ -44,14 +43,9 @@ IQRAA.components.header = (function (ns) {
     if (!root) return;
     root.innerHTML = render();
 
-    document.getElementById("header-lang-root").innerHTML = ns.components.languageToggle.render();
-    ns.components.languageToggle.initAll(root);
-
     var mobileMenuRoot = document.getElementById("mobile-menu-root");
     mobileMenuRoot.innerHTML = ns.components.mobileMenu.render(NAV_ITEMS);
     ns.components.mobileMenu.init(document.getElementById("mobile-menu"));
-    mobileMenuRoot.querySelector("#mobile-menu-lang-root").innerHTML = ns.components.languageToggle.render();
-    ns.components.languageToggle.initAll(mobileMenuRoot);
 
     var menuBtn = root.querySelector(".header__menu-button");
     function syncMenuButton(isOpen) {
@@ -61,9 +55,6 @@ IQRAA.components.header = (function (ns) {
     }
     menuBtn.addEventListener("click", function () {
       syncMenuButton(ns.components.mobileMenu.toggle());
-    });
-    ns.i18n.onLanguageChange(function () {
-      syncMenuButton(ns.components.mobileMenu.isOpen());
     });
     syncMenuButton(false);
   }

@@ -17,7 +17,7 @@ IQRAA.services.projectHelpers = (function (ns) {
   var PRIORITY_TONE = { low: "neutral", medium: "warning", high: "danger" };
 
   function locale() {
-    return ns.i18n.getLanguage() === "ar" ? "ar" : "he-IL";
+    return "he-IL";
   }
 
   function formatDate(iso) {

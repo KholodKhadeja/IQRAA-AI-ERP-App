@@ -13,7 +13,7 @@ It describes:
 - the Meetings & Decisions concept
 - responsive behavior
 - accessibility requirements
-- Hebrew/Arabic requirements
+- Hebrew-only UI language requirement (English is kept, deliberately, for status/concept terms inside the post-login Workspace — see §4.3)
 - the distinction between the internal Workspace UI and the existing public/Login UI
 
 This document is a product and UI specification, not a request to build every screen at once.
@@ -117,7 +117,7 @@ Every internal Workspace screen should use the same application shell.
 
 ## 4.1 Right Sidebar
 
-Because both supported languages are RTL, the main sidebar is on the **right side**.
+Because Hebrew is RTL, the main sidebar is on the **right side**.
 
 The sidebar contains:
 - IQRAA brand
@@ -141,29 +141,23 @@ The internal top navigation should contain:
 - current page title or contextual heading
 - breadcrumbs where useful
 - notifications
-- language selector
 - user profile/avatar
 - profile menu
 - contextual actions where appropriate
+
+There is no language selector — the app is Hebrew-only (see §4.3).
 
 The header is the **Workspace header**, not the public marketing header.
 
 ---
 
-## 4.3 Language Selector
+## 4.3 Language
 
-The application supports exactly two UI languages:
+The application has exactly one UI language: **עברית (Hebrew)**.
 
-- עברית
-- العربية
+There is no language selector and no Arabic support — this was removed deliberately (2026-09-21) in favor of a single-language app. `dir="rtl"` stays fixed.
 
-Both are RTL.
-
-The language selector is a dropdown button, not a segmented toggle.
-
-Language selection persists between sessions.
-
-All UI text must be translated.
+All UI text must be translated into Hebrew.
 
 This includes:
 - headings
@@ -177,10 +171,9 @@ This includes:
 - notifications
 - aria labels
 - table labels
-- status labels
 - confirmation dialogs
 
-Arabic must be natural, professional Arabic.
+**Deliberate exception — concept/status terms in the post-login Workspace:** inside the Workspace (dashboards and everything after login), the *values* of project status, lead status, payment/invoice status, and team-member (employee) status stay in **English** (e.g. "On Track", "Overdue", "Paid", "Active") even though every surrounding label, heading and sentence is Hebrew. This applies only to those status/concept values, not to general UI text — everything else still gets a Hebrew translation key like any other string. See `CLAUDE.md` §4 for the exact list of translation keys this applies to.
 
 ---
 
@@ -190,7 +183,6 @@ The profile area should provide:
 - user name
 - role
 - profile image/avatar where available
-- language
 - account/profile action
 - logout
 
@@ -963,10 +955,8 @@ Potential sections:
 - email
 - phone
 - profile image
-- language
 
 ### Preferences
-- language
 - notification preferences
 - accessibility preferences where appropriate
 
@@ -1048,7 +1038,7 @@ Empty states should explain:
 2. Why it may be empty
 3. What action can be taken, if applicable
 
-Empty states must be translated into Hebrew and Arabic.
+Empty states must be written in Hebrew (concept/status values may stay in English per §4.3).
 
 ---
 
@@ -1170,7 +1160,7 @@ Every new screen must pass the project's established pa11y/accessibility verific
 
 # 29. RTL Requirements
 
-Hebrew and Arabic are both RTL.
+Hebrew is RTL.
 
 `dir="rtl"` remains fixed.
 
@@ -1198,15 +1188,12 @@ Icons that represent directional concepts should be reviewed individually.
 
 ---
 
-# 30. Hebrew / Arabic Typography
+# 30. Hebrew Typography
 
 Hebrew:
 - Assistant
 
-Arabic:
-- IBM Plex Sans Arabic
-
-Do not simply translate text and assume both languages will have identical visual dimensions.
+The Workspace mixes Hebrew UI text with English concept/status values (§4.3) inline — check that this mixed-direction, mixed-script text still wraps and aligns cleanly.
 
 Check:
 - line wrapping
@@ -1218,8 +1205,6 @@ Check:
 - navigation labels
 - empty states
 
-Arabic typography must remain comfortable and readable.
-
 ---
 
 # 31. Translation Architecture
@@ -1230,9 +1215,7 @@ Every visible string must use translation keys.
 
 Never hardcode UI text directly in HTML/JS.
 
-Every new key must exist in:
-- Hebrew
-- Arabic
+Every new key must exist in Hebrew.
 
 This applies to:
 - visible text
@@ -1241,10 +1224,11 @@ This applies to:
 - title
 - alt text
 - validation messages
-- status labels
 - notification text
 - empty states
 - errors
+
+**Exception:** the small, fixed set of status/concept keys covered by §4.3 (project status, lead status, payment/invoice status, team-member status) intentionally hold English text as their translation value, even though the key still lives in the same Hebrew translation table as every other string — see `CLAUDE.md` §4 for the exact key list. Don't extend this exception to any other key without the same deliberate call.
 
 When HTML is injected dynamically, call the existing translation mechanism again.
 
@@ -1291,7 +1275,6 @@ The following should become reusable patterns:
 - Sidebar
 - Top Navbar
 - Breadcrumbs
-- Language Dropdown
 - User Menu
 - Notification Center
 - Page Header
@@ -1471,7 +1454,6 @@ Build the Workspace incrementally in this order:
 Shared internal Workspace shell:
 - Sidebar
 - Navbar
-- language selector
 - user menu
 - notifications
 - breadcrumbs
@@ -1511,7 +1493,7 @@ Client Portal
 Settings + final shared states
 
 ### Step 13
-Responsive + accessibility + Hebrew/Arabic full audit
+Responsive + accessibility + Hebrew full audit
 
 Do not skip ahead unless explicitly instructed.
 
@@ -1524,8 +1506,7 @@ A screen is not finished simply because it visually exists.
 Before marking a screen complete:
 
 - It works in Hebrew.
-- It works in Arabic.
-- Both remain RTL.
+- It stays RTL.
 - No visible string is hardcoded.
 - Responsive behavior has been checked.
 - Keyboard navigation works.

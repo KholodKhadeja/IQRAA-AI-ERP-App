@@ -101,9 +101,6 @@ window.IQRAA = window.IQRAA || {};
           menuBtn.addEventListener("click", function () {
             syncMenuBtn(ns.components.sidebar.toggle());
           });
-          ns.i18n.onLanguageChange(function () {
-            syncMenuBtn(ns.components.sidebar.isOpen());
-          });
           syncMenuBtn(false);
         }
       }

@@ -1,9 +1,10 @@
 /* Internal Workspace top header: page title, notification bell (popover
    shell only — real Notification Center content is a later screen, see
-   CLAUDE.md §9), language selector (reuses components/language-toggle.js
-   as-is) and a user menu (name/role + sign out). The bell and user-menu
-   popovers share the same open/close/click-outside/Escape wiring, one
-   generic wirePopover() instead of two near-duplicate implementations. */
+   CLAUDE.md §9) and a user menu (name/role + sign out). The bell and
+   user-menu popovers share the same open/close/click-outside/Escape
+   wiring, one generic wirePopover() instead of two near-duplicate
+   implementations. There is no language selector — the app is Hebrew-only
+   (see CLAUDE.md §12). */
 window.IQRAA = window.IQRAA || {};
 IQRAA.components = IQRAA.components || {};
 
@@ -37,8 +38,6 @@ IQRAA.components.workspaceHeader = (function (ns) {
       '<p class="workspace-popover__empty" data-i18n="workspace.notificationsEmpty"></p>' +
       "</div>" +
       "</div>" +
-
-      '<div id="workspace-lang-root"></div>' +
 
       '<div class="workspace-popover" id="workspace-user">' +
       '<button type="button" class="workspace-user__trigger" aria-haspopup="dialog" aria-expanded="false">' +
@@ -93,11 +92,6 @@ IQRAA.components.workspaceHeader = (function (ns) {
 
   function init(root) {
     root.querySelectorAll(".workspace-popover").forEach(wirePopover);
-    var langRoot = root.querySelector("#workspace-lang-root");
-    if (langRoot) {
-      langRoot.innerHTML = ns.components.languageToggle.render();
-      ns.components.languageToggle.initAll(root);
-    }
   }
 
   return { render: render, init: init };

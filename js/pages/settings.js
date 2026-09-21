@@ -54,16 +54,12 @@ window.IQRAA = window.IQRAA || {};
     function renderPreferences() {
       var host = document.getElementById("settings-preferences-body");
       host.innerHTML =
-        '<div class="field-row__label">' + ns.i18n.t("settings.languageLabel") + "</div>" +
-        '<div id="settings-lang-root"></div>' +
         '<label class="checkbox-row"><input type="checkbox" id="settings-notify-email" checked /><span>' +
         ns.i18n.t("settings.notifyEmailLabel") + "</span></label>" +
         '<label class="checkbox-row"><input type="checkbox" id="settings-notify-tasks" checked /><span>' +
         ns.i18n.t("settings.notifyTaskLabel") + "</span></label>" +
         '<p class="note-text">' + ns.i18n.t("settings.accessibilityNote") + " " +
         '<a href="accessibility.html">' + ns.i18n.t("a11yWidget.statementLink") + "</a></p>";
-      document.getElementById("settings-lang-root").innerHTML = ns.components.languageToggle.render();
-      ns.components.languageToggle.initAll(host);
     }
 
     function renderSystem() {
@@ -87,6 +83,5 @@ window.IQRAA = window.IQRAA || {};
     }
 
     renderAll();
-    ns.i18n.onLanguageChange(renderAll);
   });
 })(window.IQRAA);

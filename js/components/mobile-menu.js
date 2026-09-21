@@ -27,7 +27,6 @@ IQRAA.components.mobileMenu = (function (ns) {
       '<ul class="mobile-menu__nav-list">' + links + "</ul>" +
       "</nav>" +
       '<div class="mobile-menu__actions">' +
-      '<div class="mobile-menu__lang-row" id="mobile-menu-lang-root"></div>' +
       '<a href="' + PATHS.pages + 'login.html" class="btn btn--secondary btn--full-width" data-i18n="header.login"></a>' +
       '<a href="' + PATHS.root + 'index.html#contact" class="btn btn--primary btn--full-width" data-i18n="header.talkToUs"></a>' +
       "</div>" +

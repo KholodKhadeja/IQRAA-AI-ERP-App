@@ -124,6 +124,5 @@ window.IQRAA = window.IQRAA || {};
 
     searchInput.addEventListener("input", renderTable);
     renderTable();
-    ns.i18n.onLanguageChange(renderTable);
   });
 })(window.IQRAA);

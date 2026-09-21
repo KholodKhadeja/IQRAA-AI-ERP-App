@@ -1,27 +1,13 @@
-/* Plain-JS port of src/i18n/LanguageContext.tsx.
-   dir is never touched here — it stays fixed as <html dir="rtl"> in every
-   page (both Hebrew and Arabic are RTL, see CLAUDE.md §4). */
+/* Hebrew-only i18n. There is no language switching any more (Arabic support
+   was removed 2026-09-21i, see CLAUDE.md §12) — dir="rtl" and lang="he" are
+   fixed in every page's <html> tag, so this file only resolves keys and
+   applies them to the DOM. */
 window.IQRAA = window.IQRAA || {};
 IQRAA.i18n = IQRAA.i18n || {};
 
 (function (ns) {
-  var STORAGE_KEY = "iqraa-language";
-  var listeners = [];
-  var current = readStoredLanguage();
-
-  function readStoredLanguage() {
-    try {
-      var stored = window.localStorage.getItem(STORAGE_KEY);
-      return stored === "ar" ? "ar" : "he";
-    } catch {
-      return "he";
-    }
-  }
-
-  document.documentElement.lang = current;
-
   function t(path) {
-    var value = ns.i18n.translations[current];
+    var value = ns.i18n.translations;
     var parts = path.split(".");
     for (var i = 0; i < parts.length; i++) {
       if (value == null) return undefined;
@@ -47,27 +33,6 @@ IQRAA.i18n = IQRAA.i18n || {};
     });
   }
 
-  function setLanguage(lang) {
-    current = lang === "ar" ? "ar" : "he";
-    document.documentElement.lang = current;
-    try {
-      window.localStorage.setItem(STORAGE_KEY, current);
-    } catch {
-      /* localStorage unavailable — language just won't persist */
-    }
-    translatePage();
-    listeners.forEach(function (fn) {
-      fn(current);
-    });
-  }
-
   ns.i18n.t = t;
   ns.i18n.translatePage = translatePage;
-  ns.i18n.setLanguage = setLanguage;
-  ns.i18n.getLanguage = function () {
-    return current;
-  };
-  ns.i18n.onLanguageChange = function (fn) {
-    listeners.push(fn);
-  };
 })(window.IQRAA);

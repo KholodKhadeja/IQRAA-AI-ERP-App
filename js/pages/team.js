@@ -209,6 +209,5 @@ window.IQRAA = window.IQRAA || {};
     document.getElementById("team-create-btn").addEventListener("click", openCreateForm);
 
     renderTable();
-    ns.i18n.onLanguageChange(renderTable);
   });
 })(window.IQRAA);

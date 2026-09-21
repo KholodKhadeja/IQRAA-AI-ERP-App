@@ -39,9 +39,6 @@ IQRAA.components.textField = (function (ns) {
     toggleBtn.addEventListener("click", function () {
       sync(input.type === "password");
     });
-    ns.i18n.onLanguageChange(function () {
-      sync(input.type === "text");
-    });
     sync(false);
   }
 

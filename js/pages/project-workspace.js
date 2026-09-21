@@ -203,6 +203,5 @@ window.IQRAA = window.IQRAA || {};
     }
 
     renderAll();
-    ns.i18n.onLanguageChange(renderAll);
   });
 })(window.IQRAA);
