@@ -25,7 +25,7 @@ IQRAA.services.leadsApi = (function () {
      localhost URL once the site is actually deployed. */
   var LEADS_API_BASE = /^(localhost|127\.0\.0\.1)?$/.test(window.location.hostname)
     ? "http://localhost:3001"
-    : "https://iqraa-erp-backend.onrender.com";
+    : "https://iqraa-app-backend.onrender.com";
 
   function getLeads() {
     return fetch(LEADS_API_BASE + "/api/leads", {

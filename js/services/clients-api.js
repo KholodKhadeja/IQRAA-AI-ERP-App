@@ -21,7 +21,7 @@ IQRAA.services.clientsApi = (function () {
      localhost URL once the site is actually deployed. */
   var CLIENTS_API_BASE = /^(localhost|127\.0\.0\.1)?$/.test(window.location.hostname)
     ? "http://localhost:3001"
-    : "https://iqraa-erp-backend.onrender.com";
+    : "https://iqraa-app-backend.onrender.com";
 
   function handleJsonResponse(response) {
     return response

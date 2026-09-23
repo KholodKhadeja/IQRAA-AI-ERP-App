@@ -26,7 +26,7 @@ IQRAA.services.billingApi = (function () {
      localhost URL once the site is actually deployed. */
   var BILLING_API_BASE = /^(localhost|127\.0\.0\.1)?$/.test(window.location.hostname)
     ? "http://localhost:3001"
-    : "https://iqraa-erp-backend.onrender.com";
+    : "https://iqraa-app-backend.onrender.com";
 
   function getBilling() {
     return fetch(BILLING_API_BASE + "/api/billing", {

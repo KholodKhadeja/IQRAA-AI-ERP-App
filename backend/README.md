@@ -55,17 +55,27 @@ This service must be deployed separately from the static frontend — it's
 a real Node process, not part of the static site (see CLAUDE.md §18's
 "backend/ also needs to be deployed" note). The repo root's
 `render.yaml` defines it as a second Render Web Service
-(`iqraa-erp-backend`, `env: node`, `rootDir` pointed at this folder).
-After the first Blueprint sync, set `AIRTABLE_PAT` and `SESSION_SECRET`
-by hand in the Render dashboard (Environment tab) — both are left
-`sync: false` in `render.yaml` on purpose, they're real secrets and are
-never committed. Every other env var (`FRONTEND_ORIGIN`, the Airtable
-base/table IDs) is already set in `render.yaml`.
+(`iqraa-erp-backend` in `render.yaml`'s own service name, but the
+service actually deployed on Render ended up at
+`iqraa-app-backend.onrender.com` — see the note below), `env: node`,
+`rootDir` pointed at this folder. After the first Blueprint sync, set
+`AIRTABLE_PAT` and `SESSION_SECRET` by hand in the Render dashboard
+(Environment tab) — both are left `sync: false` in `render.yaml` on
+purpose, they're real secrets and are never committed. Every other env
+var (`FRONTEND_ORIGIN`, the Airtable base/table IDs) is already set in
+`render.yaml`.
 
-If the deployed backend's URL ever differs from
-`https://iqraa-erp-backend.onrender.com` (e.g. that service name was
-already taken and Render assigned a different one), the five
-`*_API_BASE` constants above need to be updated to match — they're
+**2026-09-24 audit finding, fixed**: the deployed backend's actual URL
+is `https://iqraa-app-backend.onrender.com`, not
+`https://iqraa-erp-backend.onrender.com` (the name `render.yaml` asks
+for was apparently unavailable, so Render assigned a different
+subdomain — exactly the scenario this section already warned about).
+All five `*_API_BASE` constants in `js/services/*.js` (`auth.js`,
+`billing-api.js`, `clients-api.js`, `dashboard-api.js`, `leads-api.js`,
+`projects-api.js`, `tasks-api.js`, `users-api.js` — eight files in
+total, this list grew since the constant was first named "five") were
+updated to point at the real URL. If the backend is ever redeployed
+under yet another name, update all of them again to match — they're
 hardcoded to the expected name, not derived from `render.yaml` at
 runtime. Likewise, if the frontend is ever redeployed at a different
 URL, `FRONTEND_ORIGIN` needs to change to match (both in `render.yaml`
@@ -83,6 +93,9 @@ locked to that one exact origin.
 | `AIRTABLE_LEADS_TABLE_ID` | Yes (for Leads/Admin Dashboard) | `tbloeMHPaOzQSypPb` — already known, defaulted in `.env.example`. |
 | `AIRTABLE_TASKS_TABLE_ID` | Yes (for Admin Dashboard) | `tbl7RP40DUSKs5WKW` — already known, not a secret, defaulted in `.env.example`. |
 | `AIRTABLE_PAYMENTS_TABLE_ID` | Yes (for Admin Dashboard) | `tblBE8s5TcVgO5fQg` — already known, not a secret, defaulted in `.env.example`. |
+| `AIRTABLE_PAYMENTS_VIEW_ID` | Yes (for Billing) | `viwVbXbqKxO0u0VFh` — already known, not a secret, defaulted in `.env.example`. |
+| `AIRTABLE_MEETINGS_TABLE_ID` | Yes (for PM Dashboard) | `tblmepMezKxNcmSJP` — already known, not a secret, defaulted in `.env.example`. |
+| `AIRTABLE_INVOICES_TABLE_ID` / `AIRTABLE_INVOICES_VIEW_ID` | Yes (for Billing) | `tbltfJG5W43wIAHAz` / `viwNMypqNpWgovnpA` — already known, defaulted in `.env.example`. |
 | `PORT` | No | Defaults to `3001`. |
 | `FRONTEND_ORIGIN` | No | Defaults to `http://localhost:3000`. The one origin CORS trusts for credentialed (cookie-bearing) requests — must match exactly where the frontend is actually served from. |
 | `SESSION_SECRET` | No (but should be set) | Signs the session cookie. If unset, a random secret is generated per-process (a startup warning is printed) — fine for local testing, but it means every backend restart invalidates every existing session. Set a real persistent value before anything beyond local testing; generate one with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. |

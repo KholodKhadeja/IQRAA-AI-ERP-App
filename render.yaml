@@ -1,0 +1,77 @@
+# Render Blueprint for the IQRAA web app.
+#
+# 2026-09-24: this repo (https://github.com/KholodKhadeja/IQRAA-AI-ERP-App)
+# now IS the site root — this folder used to be a subfolder
+# ("WebApp - Learning_Operation_ERP") of a larger monorepo, with this same
+# render.yaml living one level up and pointing at it via rootDir. The repo
+# was split so this app has its own dedicated repo (see CLAUDE.md §0/§18),
+# so rootDir is no longer needed for the static site, and the backend's
+# rootDir is now just "backend" instead of the old two-level path.
+#
+# This file only takes effect if the Render service is created/synced as a
+# Blueprint (New + -> Blueprint, pointing at this repo). If a service was
+# instead created as a plain manual Static Site, set the same value by hand
+# in the Render dashboard under that service's Settings:
+#   Root Directory:    (leave empty)
+#   Publish Directory: .
+#   Build Command:     (leave empty — no build step, see CLAUDE.md §18)
+#
+# IMPORTANT: any existing Render service that was connected to the old
+# monorepo repo with "Root Directory: WebApp - Learning_Operation_ERP" set
+# by hand in the dashboard needs that field cleared/updated manually —
+# render.yaml here can't override a dashboard-set value on an existing
+# service, only a fresh Blueprint sync reads it.
+#
+# The second service below (iqraa-erp-backend) is the Node/Express service
+# in backend/ (CLAUDE.md §19b/§19c) — until it's deployed too, the static
+# site above has nothing to talk to for login/Airtable data. AIRTABLE_PAT
+# and SESSION_SECRET are real secrets and are intentionally left unset here
+# (sync: false) — set them once by hand in the Render dashboard after the
+# first Blueprint sync, they are never committed to this file or the repo.
+services:
+  - type: web
+    name: iqraa-erp-webapp
+    env: static
+    buildCommand: ""
+    staticPublishPath: .
+
+  - type: web
+    name: iqraa-erp-backend
+    env: node
+    plan: free
+    rootDir: "backend"
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: FRONTEND_ORIGIN
+        value: https://iqraa-ai-erp-app.onrender.com
+      - key: AIRTABLE_BASE_ID
+        value: appFUvcg5tY2Dup8U
+      - key: AIRTABLE_USERS_TABLE_ID
+        value: tblOql5BcXCNhPFIS
+      - key: AIRTABLE_PROJECTS_TABLE_ID
+        value: tblK5seFEBbACNEWq
+      - key: AIRTABLE_PROJECTS_VIEW_ID
+        value: viwYcfbVNh8THD3jx
+      - key: AIRTABLE_LEADS_TABLE_ID
+        value: tbloeMHPaOzQSypPb
+      - key: AIRTABLE_CLIENTS_TABLE_ID
+        value: tblZ6VWxICXnkmzzp
+      - key: AIRTABLE_TASKS_TABLE_ID
+        value: tbl7RP40DUSKs5WKW
+      - key: AIRTABLE_PAYMENTS_TABLE_ID
+        value: tblBE8s5TcVgO5fQg
+      - key: AIRTABLE_PAYMENTS_VIEW_ID
+        value: viwVbXbqKxO0u0VFh
+      - key: AIRTABLE_MEETINGS_TABLE_ID
+        value: tblmepMezKxNcmSJP
+      - key: AIRTABLE_INVOICES_TABLE_ID
+        value: tbltfJG5W43wIAHAz
+      - key: AIRTABLE_INVOICES_VIEW_ID
+        value: viwNMypqNpWgovnpA
+      - key: AIRTABLE_PAT
+        sync: false
+      - key: SESSION_SECRET
+        sync: false

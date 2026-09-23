@@ -29,7 +29,7 @@ IQRAA.services.auth = (function () {
      CORS is considered. */
   var AUTH_API_BASE = /^(localhost|127\.0\.0\.1)?$/.test(window.location.hostname)
     ? "http://localhost:3001"
-    : "https://iqraa-erp-backend.onrender.com";
+    : "https://iqraa-app-backend.onrender.com";
 
   function login(credentials) {
     return fetch(AUTH_API_BASE + "/api/auth/login", {

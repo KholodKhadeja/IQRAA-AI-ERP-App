@@ -23,7 +23,7 @@ IQRAA.services = IQRAA.services || {};
 IQRAA.services.tasksApi = (function () {
   var TASKS_API_BASE = /^(localhost|127\.0\.0\.1)?$/.test(window.location.hostname)
     ? "http://localhost:3001"
-    : "https://iqraa-erp-backend.onrender.com";
+    : "https://iqraa-app-backend.onrender.com";
 
   function getMyTasks() {
     return fetch(TASKS_API_BASE + "/api/tasks/my", {
