@@ -62,7 +62,13 @@ const AIRTABLE_LEADS_TABLE_ID = process.env.AIRTABLE_LEADS_TABLE_ID;
    their own project(s) — see the Clients section below. */
 const AIRTABLE_CLIENTS_TABLE_ID = process.env.AIRTABLE_CLIENTS_TABLE_ID;
 const PORT = process.env.PORT || 3001;
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "http://localhost:3000";
+/* .trim() guards against a trailing space/newline in the Render
+   dashboard's env var value — that alone is enough to make Node's HTTP
+   layer throw ERR_INVALID_CHAR on every single request (any header
+   value with a raw \n/\r or trailing whitespace is rejected), which
+   crashed every route with a 500, not just CORS. Live-diagnosed
+   2026-09-24 from Render's Application Logs. */
+const FRONTEND_ORIGIN = (process.env.FRONTEND_ORIGIN || "http://localhost:3000").trim();
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 
 const MISSING_ENV_VARS = [
