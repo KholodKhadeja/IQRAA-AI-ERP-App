@@ -210,6 +210,11 @@ function requireProjectsConfigured(req, res, next) {
   if (!AIRTABLE_PAT) missing.push("AIRTABLE_PAT");
   if (!AIRTABLE_BASE_ID) missing.push("AIRTABLE_BASE_ID");
   if (!AIRTABLE_PROJECTS_TABLE_ID) missing.push("AIRTABLE_PROJECTS_TABLE_ID");
+  /* AIRTABLE_TASKS_TABLE_ID is required too (not just AIRTABLE_PROJECTS_
+     TABLE_ID) because the 2026-09-23 role-scoping fix below reads Tasks
+     to determine a Team Member's authorized project set — this route
+     genuinely depends on both tables now, not a copy-paste. */
+  if (!AIRTABLE_TASKS_TABLE_ID) missing.push("AIRTABLE_TASKS_TABLE_ID");
   if (missing.length > 0) {
     return res.status(503).json({
       error: "Airtable Projects table is not configured on this backend.",
@@ -586,14 +591,15 @@ app.get("/api/users/team", requireAuth, requireRole("admin"), requireAirtableCon
   }
 });
 
-/* ===== Projects (2026-09-21k "Connect Projects to Airtable") =====
+/* ===== Projects (2026-09-21k "Connect Projects to Airtable",
+   role-scoped 2026-09-23 "Phase 1 security fix") =====
 
    pages/projects.html + pages/project-workspace.html (js/services/
    projects-api.js) -> GET /api/projects -> this server -> Airtable REST
    API (read-only) -> Airtable Projects table (tblK5seFEBbACNEWq, view
-   viwYcfbVNh8THD3jx). Requires an authenticated session (any role) —
-   the same "frontend never talks to Airtable directly" rule as Users/
-   Auth above; the PAT never leaves this server.
+   viwYcfbVNh8THD3jx). Requires an authenticated session — the same
+   "frontend never talks to Airtable directly" rule as Users/Auth above;
+   the PAT never leaves this server.
 
    Field mapping (Airtable field -> response field), confirmed against
    the real schema via get_table_schema, not guessed:
@@ -606,13 +612,38 @@ app.get("/api/users/team", requireAuth, requireRole("admin"), requireAirtableCon
      Expected Completion   -> expectedCompletion
      Deadline               -> deadline
 
-   Deliberately NOT included/resolved: "Project Manager" is a linked
-   record (Users table) with no reliable display-name field available on
-   the Projects table itself (its only lookup pulls Users' "User ID",
-   which is unset on most real user records per the Users backend notes
-   above) — resolving a PM name would mean joining the Users table, which
-   is out of this task's scope. The frontend shows "Unassigned" for every
-   real project until a future task adds that join. */
+   "Project Manager" is a linked record (Users table) with no reliable
+   display-name field available on the Projects table itself (its only
+   lookup pulls Users' "User ID", which is unset on most real user
+   records per the Users backend notes above) — so the response resolves
+   it server-side by joining the raw "Project Manager" linked-record ids
+   (mapProjectRecord's pmIds) against the Users table, the exact same
+   pmNameFor() join GET /api/dashboard/admin already does (2026-09-23
+   "Phase 3 data mapping fixes" — see pmName below). A project with no
+   linked PM still resolves to null; the frontend shows "Unassigned" for
+   that case only, not for every real project.
+
+   Role scoping (2026-09-23 security fix — the full-application audit
+   found this endpoint returned every project to every authenticated
+   role, including Client; live-verified as a real cross-tenant leak):
+     admin      -> every project, unfiltered.
+     pm         -> only projects whose "Project Manager" link
+                   (mapProjectRecord's pmIds) contains req.session.user.id
+                   — the same real linked-record id already used by
+                   GET /api/dashboard/pm, never a frontend-supplied id.
+     teamMember -> only projects the user has at least one Task assigned
+                   in, via the EXISTING Tasks.Assignee -> Users and
+                   Tasks.Project -> Projects relationships (the same ones
+                   GET /api/tasks/my already relies on) — there is no
+                   direct Users<->Projects link for team members in the
+                   real schema, and CLAUDE.md §4 scopes a Team Member to
+                   "assigned projects and assigned tasks only," so project
+                   membership is derived from task assignment rather than
+                   inventing a new relationship/table.
+     client     -> 403. A Client session must never reach the unscoped
+                   project list at all — their own project(s) are already
+                   served correctly and securely by GET /api/clients/me
+                   (session-email-derived, never a caller-supplied id). */
 
 function airtableSelectName(value) {
   if (!value) return null;
@@ -671,9 +702,71 @@ function mapProjectRecord(record) {
 }
 
 app.get("/api/projects", requireAuth, requireProjectsConfigured, async function (req, res) {
+  const role = req.session.user.role;
+
+  /* Client sessions must never reach the unscoped project list — their
+     own project(s) are already served correctly by GET /api/clients/me.
+     Checked before any Airtable call, same "deny before you fetch"
+     shape as the role checks elsewhere in this file. */
+  if (role === "client") {
+    return res.status(403).json({ error: "Clients must use GET /api/clients/me for project access." });
+  }
+
   try {
-    const records = await fetchAllProjectRecords();
-    return res.json({ projects: records.map(mapProjectRecord) });
+    const projectRecords = await fetchAllProjectRecords();
+    let projects = projectRecords.map(mapProjectRecord);
+
+    if (role === "pm") {
+      const pmId = req.session.user.id;
+      projects = projects.filter(function (p) {
+        return (p.pmIds || []).indexOf(pmId) !== -1;
+      });
+    } else if (role === "teamMember") {
+      /* No direct Users<->Projects link exists for team members in the
+         real schema — derive their authorized project set from the
+         EXISTING Tasks.Assignee/Tasks.Project relationships instead
+         (the same ones GET /api/tasks/my already relies on), rather than
+         inventing a new relationship or table. */
+      const userId = req.session.user.id;
+      const taskRecords = await fetchAllRecordsGeneric(AIRTABLE_TASKS_TABLE_ID);
+      const myProjectIds = {};
+      taskRecords.map(mapDashboardTaskRecord).forEach(function (t) {
+        if ((t.assigneeIds || []).indexOf(userId) !== -1) {
+          (t.projectIds || []).forEach(function (pid) {
+            myProjectIds[pid] = true;
+          });
+        }
+      });
+      projects = projects.filter(function (p) {
+        return !!myProjectIds[p.id];
+      });
+    } else if (role !== "admin") {
+      /* Unknown/unmapped role — default to nothing rather than
+         everything. Should be unreachable in practice since every real
+         session role is one of admin/pm/teamMember/client. */
+      projects = [];
+    }
+
+    /* Resolve "Project Manager" linked-record ids to a display name —
+       same join pmNameFor() already does for GET /api/dashboard/admin,
+       reused here rather than a second resolution scheme (2026-09-23
+       "Phase 3 data mapping fixes"). */
+    const userRecords = await fetchAllUserRecords();
+    const usersById = {};
+    userRecords.forEach(function (r) {
+      usersById[r.id] = (r.fields && r.fields["Full Name"]) || null;
+    });
+    projects = projects.map(function (p) {
+      const pmNames = (p.pmIds || [])
+        .map(function (id) {
+          return usersById[id];
+        })
+        .filter(Boolean);
+      p.pmName = pmNames.length ? pmNames.join(", ") : null;
+      return p;
+    });
+
+    return res.json({ projects: projects });
   } catch (err) {
     console.error("[backend] Failed to fetch Projects from Airtable:", err);
     return res.status(502).json({
@@ -685,13 +778,26 @@ app.get("/api/projects", requireAuth, requireProjectsConfigured, async function 
   }
 });
 
-/* ===== Leads (2026-09-22 "Connect Leads to Airtable") =====
+/* ===== Leads (2026-09-22 "Connect Leads to Airtable", role-gated
+   2026-09-23 "Phase 1 security fix") =====
 
    pages/leads.html (js/services/leads-api.js) -> GET /api/leads -> this
    server -> Airtable REST API (read-only) -> Airtable Leads table
-   (tbloeMHPaOzQSypPb). Requires an authenticated session (any role) —
-   same "frontend never talks to Airtable directly" rule as Users/Auth/
-   Projects above; the PAT never leaves this server.
+   (tbloeMHPaOzQSypPb). Requires an authenticated ADMIN session
+   (requireRole("admin")) — same "frontend never talks to Airtable
+   directly" rule as Users/Auth/Projects above; the PAT never leaves this
+   server.
+
+   Role gate added 2026-09-23: the full-application audit found this
+   endpoint had no server-side role check at all, even though
+   pages/leads.html is Admin-only client-side (window.IQRAA_ROLE=
+   "admin") — live-verified as a real gap, both a Client session and a
+   Team Member session could retrieve every lead (names, orgs, emails,
+   phones, messages) by calling this endpoint directly. Leads is an
+   Admin-facing prospect-management area (CLAUDE.md §9's nav table has no
+   Leads entry for PM/Team Member/Client), so requireRole("admin") here
+   simply makes the server agree with what the UI already only ever
+   showed an Admin.
 
    **Status filter**: the task asked for leads whose Status is exactly
    "BOOKING MEETING", but the real Status single-select options
@@ -740,7 +846,7 @@ function mapLeadRecord(record) {
   };
 }
 
-app.get("/api/leads", requireAuth, requireLeadsConfigured, async function (req, res) {
+app.get("/api/leads", requireAuth, requireRole("admin"), requireLeadsConfigured, async function (req, res) {
   try {
     const formula = '{Status}="' + escapeForFormula(LEADS_STATUS_FILTER) + '"';
     const records = [];
@@ -842,6 +948,14 @@ function mapClientSummary(record, projectsById) {
   });
   return {
     id: record.id,
+    /* Clients' own primary field ("Client ID", e.g. "CLI-001") — distinct
+       from `id` (the Airtable record id). Exposed for the Invoice
+       Creation form (pages/billing.html): the "IQRAA - Invoice Validation
+       & Preparation (WF1)" n8n workflow's webhook looks a client up by
+       this exact text value (its "Search records" node filters Clients on
+       {Client ID} = body.clientId), not by the Airtable record id, so the
+       frontend needs the real code to send, never inventing one. */
+    clientCode: fields["Client ID"] || null,
     name: fields["Client Name"] || null,
     organization: fields.Orginazation || null,
     email: fields.Email || null,
@@ -1034,12 +1148,16 @@ app.get("/api/clients/me", requireAuth, requireRole("client"), requireClientsCon
    least one overdue task — the simplest "needs attention" signal the
    real schema actually supports without inventing a new field.
 
-   Live-data note (2026-09-22): at the time this was built, the real base
-   has 0 Task records, 0 populated Payment records and 0 Users with Role
-   "Project Manager" — so overdueTasks/outstandingPayments/readyToStart/
-   pmWorkload legitimately compute to 0/empty against the current data,
-   not a bug. See the chat report for this task for the full live
-   verification against the actual records. */
+   Live-data note (superseded 2026-09-23): on 2026-09-22, when this
+   endpoint was first built, the real base had 0 Task records, 0
+   populated Payment records and 0 Users with Role "Project Manager", so
+   overdueTasks/outstandingPayments/readyToStart/pmWorkload legitimately
+   computed to 0/empty against the data at the time, not a bug. That is
+   no longer the current state — Tasks, Payments and a Project-Manager
+   user were subsequently added (see the My Tasks and Invoices/Payments
+   sections below), so these KPIs now compute against real records. This
+   note is kept only to explain that history; the aggregation logic
+   itself is unchanged. */
 
 const AIRTABLE_TASKS_TABLE_ID = process.env.AIRTABLE_TASKS_TABLE_ID;
 const AIRTABLE_PAYMENTS_TABLE_ID = process.env.AIRTABLE_PAYMENTS_TABLE_ID;
@@ -1124,6 +1242,15 @@ function mapDashboardTaskRecord(record) {
        fields it doesn't read. */
     title: fields["Task Name"] || null,
     projectIds: fields.Project || [],
+    /* "assigneeIds"/"priority" are additive too (2026-09-23 "Connect My
+       Tasks to Airtable") — GET /api/tasks/my needs Tasks.Assignee (the
+       real linked-record field, an array of Airtable Users record ids —
+       see CLAUDE.md's "never filter by the User ID text field" rule) to
+       find this user's own tasks, and Priority (plain free text on this
+       table, not a select) for display. Neither the Admin nor PM
+       dashboard call sites read these, so this stays purely additive. */
+    assigneeIds: fields.Assignee || [],
+    priority: fields.Priority || null,
     status: airtableSelectName(fields.Status),
     dueDate: fields["Due Date"] || null
   };
@@ -1594,28 +1721,67 @@ app.get("/api/dashboard/pm", requireAuth, requireRole("pm"), requirePmDashboardC
    the existing fetchAllProjectRecords()/mapProjectRecord() and a small
    Clients name lookup rather than trusting the link's own display name).
 
-   "Invoice Status" column = the linked Invoice record's own "Status"
-   field (matches the existing billingFields.invoiceStatus column exactly
-   — the test Invoices were deliberately given the values "Paid"/
-   "Pending"/"Overdue" to fit the SAME invoiceStatus.* vocabulary
-   billing.js already renders via CLAUDE.md §12's status-value English
-   exception), not Payments' own "Invoice Status" select (a different,
-   internal-processing vocabulary that has no existing UI slot on this
-   screen and would need one invented — out of this task's "don't
-   redesign" scope). A Payment with no linked Invoice, or whose linked
-   Invoice's Status text doesn't match one of paid/pending/overdue,
-   renders as a neutral, untranslated fallback client-side rather than
-   inventing a status.
+   "Invoice Status" (on a Payment row) = the linked Invoice record's own
+   free-text "Status" field, shown as-is (no i18n lookup, same treatment
+   as Leads' free-text status — CLAUDE.md §12 only covers a closed set of
+   known vocabularies, and Invoices.Status is deliberately open text, not
+   a select). Not Payments' own "Invoice Status" select (a different,
+   internal-processing vocabulary with no UI slot here).
 
-   KPI totals mirror the 5 existing billing.kpi* cards exactly:
-   totalValue/received/pending/overdueAmount are sums of Payments.Amount
-   grouped by Payments.Status (Paid/Pending/Overdue respectively;
-   totalValue is every payment regardless of status) — no due-date-based
-   "is this overdue" guess is needed the way the old mock data required,
-   since Payments.Status already has a real "Overdue" option.
-   "awaitingPaymentProjects" (billing.kpiAwaitingPayment) = count of
-   distinct projects with at least one non-Paid payment, the same
-   per-project meaning the old mock KPI had. */
+   ===== Admin financial management audit (2026-09-22) =====
+
+   Extended this endpoint (still the same GET /api/billing, no second
+   endpoint) to expose real Invoice records instead of just borrowing
+   their Status text for a Payment row. CLAUDE.md §5's own rule — "do NOT
+   treat Invoice Status and Payment Status as the same thing" — is
+   implemented as two separate fields per invoice:
+     - status: the Invoice's own free-text Status field, untouched.
+     - paymentStatus: a derived "unpaid" | "partial" | "paid" | "overdue"
+       computed here from the invoice's Total against the SUM of its
+       linked Payments' Amount (only Payments with Status==="Paid" count
+       toward "paid") — never from the Invoice's own Status text. See
+       deriveInvoicePaymentStatus() below for the exact rule, which
+       matches the task's worked example (Total 5000, Payments 2000+1000
+       -> paid 3000, remaining 2000, status "partial") exactly. "overdue"
+       overrides "unpaid"/"partial" (never "paid") when at least one
+       linked Payment's Due Date has passed while money is still owed —
+       Invoices has no Due Date field of its own, so a linked Payment's
+       Due Date is the only date available to test against.
+   Per the project owner's explicit 2026-09-22 answer, this derived
+   paymentStatus renders as English words on the Hebrew page (paymentStatus.*
+   in translations.js) — the same convention as the pre-existing
+   status / leadStatus / invoiceStatus / team.status exception in
+   CLAUDE.md §12, now a fifth named category there.
+
+   kpis is now { invoices: {...}, payments: {...} } instead of one flat
+   object — invoices.totalInvoices/totalInvoicedAmount/openUnpaidInvoices
+   and payments.totalPaid/totalOutstanding/partiallyPaidInvoices/
+   overduePayments, computed per the task's Step 5 spec: totalOutstanding
+   sums each invoice's own (total - paidAmount) rather than trusting any
+   status field; totalPaid sums actual Payment records with
+   Status==="Paid" (not derived from Invoice Status); overduePayments
+   counts individual Payment records (Status==="Overdue", or a past Due
+   Date on a not-yet-Paid payment) — a payment-level metric, deliberately
+   separate from the invoice-level paymentStatus above. The previous flat
+   totalValue/received/pending/overdueAmount/awaitingPaymentProjects
+   shape is dropped — nothing outside js/pages/billing.js (rewritten in
+   this same task) ever read it. */
+
+function isPastDue(dateStr) {
+  if (!dateStr) return false;
+  return new Date(dateStr) < new Date(new Date().toDateString());
+}
+
+function deriveInvoicePaymentStatus(total, paidAmount, linkedPayments) {
+  if (total > 0 && paidAmount >= total) return "paid";
+  const remaining = total - paidAmount;
+  const anyOverdue = linkedPayments.some(function (p) {
+    return p.dueDate && p.status !== "Paid" && isPastDue(p.dueDate);
+  });
+  if (remaining > 0 && anyOverdue) return "overdue";
+  if (paidAmount > 0) return "partial";
+  return "unpaid";
+}
 
 function requireBillingConfigured(req, res, next) {
   const missing = [];
@@ -1713,17 +1879,11 @@ app.get("/api/billing", requireAuth, requireRole("admin"), requireBillingConfigu
       clientsById[r.id] = { name: (r.fields && r.fields["Client Name"]) || null };
     });
 
-    const invoicesById = {};
-    invoiceRecords.forEach(function (r) {
-      const f = r.fields || {};
-      invoicesById[r.id] = { invoiceNumber: f.InvoiceNumber || null, status: f.Status || null };
-    });
-
     /* The real Payments table has pre-existing blank placeholder rows
        (no fields set at all) — same pattern already documented for the
        Users table (see /api/users/team above). A blank row has no
        "Payment ID", so that's the filter, same idea as that route's
-       roleKey-must-map filter. */
+       roleKey-must-map filter. Same for Invoices: no "InvoiceNumber". */
     const payments = paymentRecords
       .filter(function (record) {
         return !!(record.fields && record.fields["Payment ID"]);
@@ -1733,7 +1893,6 @@ app.get("/api/billing", requireAuth, requireRole("admin"), requireBillingConfigu
         const projectId = firstLinkedId(fields.Projects);
         const clientId = firstLinkedId(fields.Clients);
         const invoiceId = firstLinkedId(fields["Invoice ID"]);
-        const invoice = invoiceId ? invoicesById[invoiceId] : null;
         return {
           id: record.id,
           paymentId: fields["Payment ID"] || null,
@@ -1741,60 +1900,204 @@ app.get("/api/billing", requireAuth, requireRole("admin"), requireBillingConfigu
           projectName: projectId && projectsById[projectId] ? projectsById[projectId].name : null,
           clientId: clientId,
           clientName: clientId && clientsById[clientId] ? clientsById[clientId].name : null,
+          invoiceId: invoiceId,
           paymentType: airtableSelectName(fields["Payment Type"]),
           amount: typeof fields.Amount === "number" ? fields.Amount : 0,
           status: airtableSelectName(fields.Status),
           dueDate: fields["Due Date"] || null,
           paidDate: fields["Paid Date"] || null,
-          invoiceNumber: invoice ? invoice.invoiceNumber : null,
-          invoiceStatus: invoice ? invoice.status : null
+          notes: fields.Notes || null
         };
       });
 
-    const received = payments
+    const paymentsByInvoiceId = {};
+    payments.forEach(function (p) {
+      if (!p.invoiceId) return;
+      if (!paymentsByInvoiceId[p.invoiceId]) paymentsByInvoiceId[p.invoiceId] = [];
+      paymentsByInvoiceId[p.invoiceId].push(p);
+    });
+
+    const invoices = invoiceRecords
+      .filter(function (record) {
+        return !!(record.fields && record.fields.InvoiceNumber);
+      })
+      .map(function (record) {
+        const fields = record.fields || {};
+        const clientId = firstLinkedId(fields.ClientID);
+        const amount = typeof fields.Amount === "number" ? fields.Amount : 0;
+        const vatAmount = typeof fields.VatAmount === "number" ? fields.VatAmount : 0;
+        const total = typeof fields.Total === "number" ? fields.Total : amount + vatAmount;
+        const linkedPayments = paymentsByInvoiceId[record.id] || [];
+        const paidAmount = linkedPayments
+          .filter(function (p) {
+            return p.status === "Paid";
+          })
+          .reduce(function (sum, p) {
+            return sum + p.amount;
+          }, 0);
+        const remaining = Math.max(0, total - paidAmount);
+        return {
+          id: record.id,
+          invoiceNumber: fields.InvoiceNumber || null,
+          clientId: clientId,
+          clientName: clientId && clientsById[clientId] ? clientsById[clientId].name : null,
+          amount: amount,
+          vatAmount: vatAmount,
+          total: total,
+          status: fields.Status || null,
+          pdfUrl: fields.PdfUrl || null,
+          created: fields.Created || record.createdTime || null,
+          paidAmount: paidAmount,
+          remaining: remaining,
+          paymentStatus: deriveInvoicePaymentStatus(total, paidAmount, linkedPayments),
+          payments: linkedPayments.map(function (p) {
+            return { id: p.id, paymentId: p.paymentId, amount: p.amount, status: p.status, dueDate: p.dueDate, paidDate: p.paidDate };
+          })
+        };
+      });
+
+    const invoicesById = {};
+    invoices.forEach(function (inv) {
+      invoicesById[inv.id] = inv;
+    });
+
+    const paymentsOut = payments.map(function (p) {
+      const invoice = p.invoiceId ? invoicesById[p.invoiceId] : null;
+      return Object.assign({}, p, {
+        invoiceNumber: invoice ? invoice.invoiceNumber : null,
+        invoiceStatus: invoice ? invoice.status : null
+      });
+    });
+
+    const totalInvoicedAmount = invoices.reduce(function (sum, inv) {
+      return sum + inv.total;
+    }, 0);
+    const openUnpaidInvoices = invoices.filter(function (inv) {
+      return inv.paymentStatus !== "paid";
+    }).length;
+    const partiallyPaidInvoices = invoices.filter(function (inv) {
+      return inv.paymentStatus === "partial";
+    }).length;
+    const totalOutstanding = invoices.reduce(function (sum, inv) {
+      return sum + inv.remaining;
+    }, 0);
+
+    const totalPaid = paymentsOut
       .filter(function (p) {
         return p.status === "Paid";
       })
       .reduce(function (sum, p) {
         return sum + p.amount;
       }, 0);
-    const pending = payments
-      .filter(function (p) {
-        return p.status === "Pending";
-      })
-      .reduce(function (sum, p) {
-        return sum + p.amount;
-      }, 0);
-    const overdueAmount = payments
-      .filter(function (p) {
-        return p.status === "Overdue";
-      })
-      .reduce(function (sum, p) {
-        return sum + p.amount;
-      }, 0);
-    const totalValue = payments.reduce(function (sum, p) {
-      return sum + p.amount;
-    }, 0);
-
-    const awaitingPaymentProjectIds = {};
-    payments.forEach(function (p) {
-      if (p.status !== "Paid" && p.projectId) awaitingPaymentProjectIds[p.projectId] = true;
-    });
+    const overduePayments = paymentsOut.filter(function (p) {
+      return p.status !== "Paid" && (p.status === "Overdue" || isPastDue(p.dueDate));
+    }).length;
 
     return res.json({
       kpis: {
-        totalValue: totalValue,
-        received: received,
-        pending: pending,
-        overdueAmount: overdueAmount,
-        awaitingPaymentProjects: Object.keys(awaitingPaymentProjectIds).length
+        invoices: {
+          totalInvoices: invoices.length,
+          totalInvoicedAmount: totalInvoicedAmount,
+          openUnpaidInvoices: openUnpaidInvoices
+        },
+        payments: {
+          totalPaid: totalPaid,
+          totalOutstanding: totalOutstanding,
+          partiallyPaidInvoices: partiallyPaidInvoices,
+          overduePayments: overduePayments
+        }
       },
-      payments: payments
+      invoices: invoices,
+      payments: paymentsOut
     });
   } catch (err) {
     console.error("[backend] Failed to compute Billing data:", err);
     return res.status(502).json({
       error: "Could not retrieve billing data from Airtable.",
+      airtableStatus: err.airtableStatus,
+      airtableError: err.airtableError,
+      details: err.airtableStatus ? undefined : err.message
+    });
+  }
+});
+
+/* ===== Tasks — My Tasks (2026-09-23 "Connect My Tasks to Airtable") =====
+
+   pages/my-tasks.html -> GET /api/tasks/my -> this server -> Airtable
+   Tasks table, filtered by Tasks.Assignee -> JSON -> my-tasks.html.
+   First screen wired to the corrected relationship architecture from the
+   audit/fixes tasks immediately before this one.
+
+   User identification: req.session.user.id is already the real Airtable
+   Users record id — it comes straight from userRecord.id at login time
+   (see POST /api/auth/login above), never from the Users.User ID text
+   field. That is exactly the id Tasks.Assignee links point at, so no
+   extra resolution step is needed here — this endpoint reads
+   req.session.user.id directly and filters Tasks whose Assignee array
+   contains it, the same "join by real record id, not a display id"
+   pattern /api/dashboard/pm already uses for pmId against Projects'
+   Project Manager field. Never accepts a user id from the request. */
+
+function requireTasksConfigured(req, res, next) {
+  const missing = [];
+  if (!AIRTABLE_PAT) missing.push("AIRTABLE_PAT");
+  if (!AIRTABLE_BASE_ID) missing.push("AIRTABLE_BASE_ID");
+  if (!AIRTABLE_TASKS_TABLE_ID) missing.push("AIRTABLE_TASKS_TABLE_ID");
+  if (!AIRTABLE_PROJECTS_TABLE_ID) missing.push("AIRTABLE_PROJECTS_TABLE_ID");
+  if (missing.length > 0) {
+    return res.status(503).json({
+      error: "Airtable tables required for My Tasks are not fully configured on this backend.",
+      missingEnvVars: missing
+    });
+  }
+  next();
+}
+
+app.get("/api/tasks/my", requireAuth, requireTasksConfigured, async function (req, res) {
+  try {
+    const userId = req.session.user.id;
+
+    const [taskRecords, projectRecords] = await Promise.all([
+      fetchAllRecordsGeneric(AIRTABLE_TASKS_TABLE_ID),
+      fetchAllProjectRecords()
+    ]);
+
+    const projectsById = {};
+    projectRecords.map(mapProjectRecord).forEach(function (p) {
+      projectsById[p.id] = p;
+    });
+
+    function projectFor(linkedIds) {
+      return (linkedIds || [])
+        .map(function (id) {
+          return projectsById[id];
+        })
+        .filter(Boolean)[0] || null;
+    }
+
+    const myTasks = taskRecords
+      .map(mapDashboardTaskRecord)
+      .filter(function (t) {
+        return (t.assigneeIds || []).indexOf(userId) !== -1;
+      })
+      .map(function (t) {
+        const project = projectFor(t.projectIds);
+        return {
+          id: t.id,
+          title: t.title,
+          status: t.status,
+          priority: t.priority,
+          dueDate: t.dueDate,
+          projectId: project ? project.id : null,
+          projectName: project ? project.name : null
+        };
+      });
+
+    return res.json({ tasks: myTasks });
+  } catch (err) {
+    console.error("[backend] Failed to fetch My Tasks from Airtable:", err);
+    return res.status(502).json({
+      error: "Could not retrieve tasks from Airtable.",
       airtableStatus: err.airtableStatus,
       airtableError: err.airtableError,
       details: err.airtableStatus ? undefined : err.message

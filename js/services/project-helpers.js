@@ -486,8 +486,10 @@ IQRAA.services.projectHelpers = (function (ns) {
      column order) so the real-data Projects List looks pixel-identical to
      the mock-data version it replaces; only the field access differs
      since these records don't have clientId/pmId to look up. Project
-     Manager always reads "Unassigned" — see the file-header comment on
-     why that's not resolved from Airtable here. */
+     Manager renders p.pmName, resolved server-side by GET /api/projects
+     (backend/server.js, 2026-09-23 "Phase 3 data mapping fixes") by
+     joining the real "Project Manager" linked-record ids against Users
+     — "Unassigned" only shows for a project with no linked PM. */
   function renderRealProjectsTable(containerId, projects, emptyKey) {
     var host = document.getElementById(containerId);
     if (!host) return;
@@ -513,7 +515,7 @@ IQRAA.services.projectHelpers = (function (ns) {
           '<a class="data-table__primary" href="' + projectLink(p.id) + '">' + (p.name || ns.i18n.t("projectFields.unassigned")) + "</a>" +
           "</td>" +
           '<td data-label="' + ns.i18n.t("projectFields.client") + '">' + (p.client || ns.i18n.t("projectFields.unassigned")) + "</td>" +
-          '<td data-label="' + ns.i18n.t("projectFields.pm") + '">' + ns.i18n.t("projectFields.unassigned") + "</td>" +
+          '<td data-label="' + ns.i18n.t("projectFields.pm") + '">' + (p.pmName || ns.i18n.t("projectFields.unassigned")) + "</td>" +
           '<td data-label="' + ns.i18n.t("projectFields.stage") + '">' + airtableStageLabel(p.stage) + "</td>" +
           '<td data-label="' + ns.i18n.t("projectFields.progress") + '">' +
           '<div class="progress-bar"><div class="progress-bar__fill" style="width:' + (p.progress || 0) + '%"></div></div>' +

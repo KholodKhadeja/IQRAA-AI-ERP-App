@@ -9,16 +9,13 @@
    project directly in Airtable and reloading this page reflects the
    change, nothing is cached client-side across loads.
 
-   Known scope limit (documented, not a bug): the previous mock-data
-   version filtered this list per role (a PM saw only ph.projectsForPm(),
-   a Team Member only ph.projectsForTeamMember()) using the mock demo
-   identities data.currentPmId/currentTeamMemberId. Real Airtable projects
-   don't carry a pmId/teamIds shaped to match those demo identities (see
-   backend/server.js's Projects section for why "Project Manager" isn't
-   resolved to a name at all yet), so there's no reliable way to scope
-   this list per role yet — every role currently sees the same full real
-   list. Re-introduce role scoping once a future task joins Project
-   Manager/team assignment back to real user records. */
+   Role scoping is enforced server-side now (2026-09-23 "Phase 1 security
+   fix" — see backend/server.js's GET /api/projects comment): admin gets
+   every project, pm/teamMember get their own real subset, client is
+   rejected outright. "Project Manager" is resolved to a display name
+   server-side too (2026-09-23 "Phase 3 data mapping fixes", p.pmName) by
+   joining the real "Project Manager" linked-record ids against Users —
+   see project-helpers.js's renderRealProjectsTable(). */
 window.IQRAA = window.IQRAA || {};
 
 (function (ns) {

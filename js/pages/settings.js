@@ -4,25 +4,24 @@
    js/workspace-chrome.js, 2026-09-21h). No password/secret field anywhere
    here (CLAUDE.md §5/§20). Preferences don't duplicate the floating
    accessibility widget's controls (CLAUDE.md §7) — just a link to the
-   accessibility statement plus a short pointer to the widget. */
+   accessibility statement plus a short pointer to the widget.
+
+   Profile identity comes straight from the real, session-derived
+   session.user (2026-09-23 "Phase 3 data mapping fixes") — GET
+   /api/auth/me's response only ever contains {id,email,fullName,role}
+   (CLAUDE.md §5/§19c), so that's the entire identity available here; the
+   previous mock ROLE_DEMO_NAME lookup (data.currentPmId/
+   currentTeamMemberId/currentClientId) is gone. Phone has no real
+   session field to source from, so it's left blank rather than filled
+   from mock client/PM data that doesn't belong to the logged-in user. */
 window.IQRAA = window.IQRAA || {};
 
 (function (ns) {
   ns.workspaceAuthReady.then(function (session) {
     var data = ns.data;
-    var ph = ns.services.projectHelpers;
-    if (!data || !ph) return;
-
-    var ROLE_DEMO_NAME = {
-      admin: ns.i18n.t("workspace.roleLabel.admin"),
-      pm: ph.pmName(data.currentPmId),
-      teamMember: ph.teamMemberName(data.currentTeamMemberId),
-      client: ph.getClient(data.currentClientId) ? ph.getClient(data.currentClientId).contactName : ""
-    };
+    if (!data) return;
 
     function renderProfile() {
-      var role = session.user.role || "admin";
-      var name = ROLE_DEMO_NAME[role] || ns.i18n.t("workspace.demoUserLabel");
       var idp = "settings-profile";
       var host = document.getElementById("settings-profile-body");
       host.innerHTML =
@@ -36,15 +35,9 @@ window.IQRAA = window.IQRAA || {};
         "</form>" +
         '<p class="note-text" id="settings-save-success" hidden>' + ns.i18n.t("settings.saveSuccess") + "</p>";
 
-      document.getElementById(idp + "-name").value = name;
-      if (role === "pm") document.getElementById(idp + "-email").value = ph.pmEmail(data.currentPmId);
-      if (role === "client") {
-        var client = ph.getClient(data.currentClientId);
-        if (client) {
-          document.getElementById(idp + "-email").value = client.contactEmail;
-          document.getElementById(idp + "-phone").value = client.contactPhone;
-        }
-      }
+      document.getElementById(idp + "-name").value = session.user.fullName || "";
+      document.getElementById(idp + "-email").value = session.user.email || "";
+
       document.getElementById(idp + "-form").addEventListener("submit", function (event) {
         event.preventDefault();
         document.getElementById("settings-save-success").hidden = false;
