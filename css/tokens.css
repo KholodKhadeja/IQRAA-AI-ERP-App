@@ -26,6 +26,22 @@
   --danger-soft: rgba(180, 61, 104, 0.12);
   --neutral-soft: rgba(102, 98, 118, 0.12);
 
+  /* Accent palette — distinct per-KPI/per-category colors for the internal
+     Workspace's data-viz surfaces (KPI card icons, stage-breakdown bars).
+     Each pairs a solid icon/text color with a soft tint background, same
+     shape as --success/--success-soft above. Kept separate from
+     --success/--warning/--danger, which stay reserved for actual
+     positive/caution/negative semantics (badges) — these are purely
+     categorical (which KPI is which), not a severity signal. */
+  --accent-amber: #b45309;
+  --accent-amber-soft: #fff1dc;
+  --accent-rose: #be123c;
+  --accent-rose-soft: #fde3ec;
+  --accent-blue: #1d4ed8;
+  --accent-blue-soft: #e1eaff;
+  --accent-teal: #0f766e;
+  --accent-teal-soft: #dbf3ef;
+
   /* Typography */
   --font-family: "Assistant", "Arial", sans-serif;
   --font-size-xs: 0.8125rem;

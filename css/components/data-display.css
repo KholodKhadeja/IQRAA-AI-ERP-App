@@ -52,6 +52,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  box-shadow: var(--shadow-sm);
 }
 
 /* .panel sets display:flex unconditionally, which otherwise beats the
@@ -146,19 +147,22 @@
   gap: var(--space-3);
   text-decoration: none;
   color: inherit;
+  box-shadow: var(--shadow-sm);
   transition:
+    transform var(--transition-fast),
     border-color var(--transition-fast),
     box-shadow var(--transition-fast);
 }
 
 a.kpi-card:hover {
   border-color: var(--primary);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
 }
 
 .kpi-card__icon {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   border-radius: var(--radius-md);
   background: var(--primary-soft);
   color: var(--primary-dark);
@@ -166,6 +170,41 @@ a.kpi-card:hover {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+
+/* Per-KPI accent variants — a distinct color per category so a KPI row
+   reads at a glance instead of every card repeating the same brand-purple
+   icon chip. Purely categorical, not a severity signal (see the
+   --accent-* tokens' comment in tokens.css) — pick whichever variant fits
+   each KPI's own icon/topic, not what the number means. */
+.kpi-card__icon--amber {
+  background: var(--accent-amber-soft);
+  color: var(--accent-amber);
+}
+
+.kpi-card__icon--rose {
+  background: var(--accent-rose-soft);
+  color: var(--accent-rose);
+}
+
+.kpi-card__icon--blue {
+  background: var(--accent-blue-soft);
+  color: var(--accent-blue);
+}
+
+.kpi-card__icon--teal {
+  background: var(--accent-teal-soft);
+  color: var(--accent-teal);
+}
+
+.kpi-card__icon--purple {
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+}
+
+.kpi-card__icon--green {
+  background: var(--success-soft);
+  color: var(--success);
 }
 
 .kpi-card__value {
@@ -219,6 +258,14 @@ a.kpi-card:hover {
 
 .data-table tbody tr:last-child td {
   border-bottom: 0;
+}
+
+.data-table tbody tr {
+  transition: background-color var(--transition-fast);
+}
+
+.data-table tbody tr:hover {
+  background: var(--surface-hover);
 }
 
 .data-table__primary {

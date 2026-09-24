@@ -53,8 +53,23 @@ window.IQRAA = window.IQRAA || {};
       return ph.badge(statusLabelText, PAYMENT_STATUS_TONE[statusLabelText] || "neutral");
     }
 
-    function kpiIcon(name) {
-      return '<span class="kpi-card__icon" aria-hidden="true">' + ns.icons[name](20) + "</span>";
+    function kpiIcon(name, accent) {
+      var accentClass = accent ? " kpi-card__icon--" + accent : "";
+      return '<span class="kpi-card__icon' + accentClass + '" aria-hidden="true">' + ns.icons[name](20) + "</span>";
+    }
+
+    /* Interpolates between the pale and dark ends of the brand purple scale
+       so a stage with more projects in it reads as visibly "deeper" than a
+       barely-populated one — a sequential encoding of the same count the
+       bar's width and the number already show, not decoration for its own
+       sake. ratio is 0..1 (a stage's count / the busiest stage's count). */
+    function stagePurple(ratio) {
+      var from = [239, 237, 251]; // ~ --primary-pale
+      var to = [81, 66, 184]; // ~ --primary-dark
+      var rgb = from.map(function (c, i) {
+        return Math.round(c + (to[i] - c) * ratio);
+      });
+      return "rgb(" + rgb.join(",") + ")";
     }
 
     function renderLoading() {
@@ -85,12 +100,12 @@ window.IQRAA = window.IQRAA || {};
 
     function renderKpis(kpis) {
       var items = [
-        { icon: "trendingUp", value: kpis.newLeads, labelKey: "adminOverview.kpiNewLeads", href: "leads.html" },
-        { icon: "folder", value: kpis.activeProjects, labelKey: "adminOverview.kpiProjectsInProgress", href: "projects.html" },
-        { icon: "layoutDashboard", value: kpis.readyToStart, labelKey: "adminOverview.kpiProjectsReadyToStart", href: "projects.html" },
-        { icon: "check", value: kpis.pendingClientApprovals, labelKey: "adminOverview.kpiPendingApprovals" },
-        { icon: "alertTriangle", value: kpis.overdueTasks, labelKey: "adminOverview.kpiOverdueTasks" },
-        { icon: "creditCard", value: ph.formatCurrency(kpis.outstandingPaymentsAmount), labelKey: "adminOverview.kpiOutstandingPayments", href: "billing.html" }
+        { icon: "trendingUp", accent: "green", value: kpis.newLeads, labelKey: "adminOverview.kpiNewLeads", href: "leads.html" },
+        { icon: "folder", accent: "purple", value: kpis.activeProjects, labelKey: "adminOverview.kpiProjectsInProgress", href: "projects.html" },
+        { icon: "layoutDashboard", accent: "teal", value: kpis.readyToStart, labelKey: "adminOverview.kpiProjectsReadyToStart", href: "projects.html" },
+        { icon: "check", accent: "blue", value: kpis.pendingClientApprovals, labelKey: "adminOverview.kpiPendingApprovals" },
+        { icon: "alertTriangle", accent: "rose", value: kpis.overdueTasks, labelKey: "adminOverview.kpiOverdueTasks" },
+        { icon: "creditCard", accent: "amber", value: ph.formatCurrency(kpis.outstandingPaymentsAmount), labelKey: "adminOverview.kpiOutstandingPayments", href: "billing.html" }
       ];
       document.getElementById("admin-kpi-grid").innerHTML = items
         .map(function (item) {
@@ -98,7 +113,7 @@ window.IQRAA = window.IQRAA || {};
           var hrefAttr = item.href ? ' href="' + item.href + '"' : "";
           return (
             "<" + tag + ' class="kpi-card"' + hrefAttr + ">" +
-            kpiIcon(item.icon) +
+            kpiIcon(item.icon, item.accent) +
             '<span class="kpi-card__value">' + item.value + "</span>" +
             '<span class="kpi-card__label">' + ns.i18n.t(item.labelKey) + "</span>" +
             "</" + tag + ">"
@@ -153,11 +168,14 @@ window.IQRAA = window.IQRAA || {};
       });
       host.innerHTML = projectsByStage
         .map(function (row) {
-          var width = Math.round((row.count / max) * 100);
+          var ratio = row.count / max;
+          var width = Math.round(ratio * 100);
+          var rowClass = "admin-overview__stage-row" + (row.count > 0 ? " admin-overview__stage-row--active" : "");
+          var fillStyle = row.count > 0 ? "width:" + width + "%;background:" + stagePurple(ratio) : "width:0%";
           return (
-            '<div class="admin-overview__stage-row">' +
+            '<div class="' + rowClass + '">' +
             '<span class="admin-overview__stage-label">' + ph.airtableStageLabel(row.stage) + "</span>" +
-            '<span class="admin-overview__stage-bar progress-bar"><span class="progress-bar__fill" style="width:' + width + '%"></span></span>' +
+            '<span class="admin-overview__stage-bar progress-bar"><span class="progress-bar__fill" style="' + fillStyle + '"></span></span>' +
             '<span class="admin-overview__stage-count">' + row.count + "</span>" +
             "</div>"
           );

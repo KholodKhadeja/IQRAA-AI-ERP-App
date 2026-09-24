@@ -40,10 +40,24 @@
   min-width: 0;
 }
 
+.admin-overview__stage-bar.progress-bar {
+  background: var(--primary-pale);
+}
+
 .admin-overview__stage-count {
   flex: 0 0 24px;
   text-align: end;
   font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+/* A stage with at least one project reads as the "current" story of the
+   pipeline — bolder label/count instead of the same muted gray as every
+   empty stage. */
+.admin-overview__stage-row--active .admin-overview__stage-label,
+.admin-overview__stage-row--active .admin-overview__stage-count {
+  color: var(--primary-dark);
   font-weight: 700;
 }
 
