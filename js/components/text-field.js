@@ -14,7 +14,7 @@ IQRAA.components.textField = (function (ns) {
       : "";
     return (
       '<div class="text-field">' +
-      '<label for="' + id + '" class="text-field__label" data-i18n="' + opts.labelI18nKey + '"></label>' +
+      '<label for="' + id + '" class="text-field__label">' + ns.i18n.t(opts.labelI18nKey) + "</label>" +
       '<div class="text-field__input-wrap">' +
       '<input id="' + id + '" name="' + (opts.name || id) + '" type="' + type + '" class="text-field__input"' + required + autoComplete + ' />' +
       toggle +
