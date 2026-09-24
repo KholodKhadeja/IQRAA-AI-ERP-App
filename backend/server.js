@@ -150,6 +150,18 @@ const ROLE_KEY_TO_AIRTABLE_LABEL = {
 const VALID_STATUSES = ["Active", "Inactive"];
 
 const app = express();
+/* Required by express-session whenever cookie.secure:true and the app
+   sits behind a reverse proxy that terminates TLS (Render's edge does,
+   same as Heroku/most PaaS setups) — without this, Express sees every
+   request as plain HTTP (no way to read the X-Forwarded-Proto header
+   Render sets), so express-session silently refuses to send Set-Cookie
+   at all on a secure cookie. That looked like session persistence
+   failing for no reason: login returned 200 with no visible error, but
+   no cookie ever reached the browser, so every subsequent GET
+   /api/auth/me was a guaranteed 401 and workspace-chrome.js bounced
+   straight back to Login. Live-diagnosed 2026-09-24. Only matters when
+   IS_PRODUCTION is true (secure:false locally never needed this). */
+app.set("trust proxy", 1);
 app.use(
   cors({
     origin: FRONTEND_ORIGIN,
