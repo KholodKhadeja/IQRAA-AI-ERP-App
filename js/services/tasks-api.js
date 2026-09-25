@@ -16,7 +16,13 @@
 
    Deliberately uncached: getMyTasks() issues a fresh network request
    every time it's called — every page load calls it anew, same pattern
-   as projectsApi.getProjects(). */
+   as projectsApi.getProjects().
+
+   updateTaskStatus() added 2026-09-25 ("My Tasks status update" fix) —
+   PATCH /api/tasks/:id/status on the same backend, writing the real
+   Tasks.Status field in Airtable (the backend re-validates the task's
+   Assignee against the session before writing, see backend/README.md).
+   Same credentials:"include"/error-shape convention as getMyTasks(). */
 window.IQRAA = window.IQRAA || {};
 IQRAA.services = IQRAA.services || {};
 
@@ -46,5 +52,29 @@ IQRAA.services.tasksApi = (function () {
     });
   }
 
-  return { getMyTasks: getMyTasks };
+  function updateTaskStatus(taskId, status) {
+    return fetch(TASKS_API_BASE + "/api/tasks/" + encodeURIComponent(taskId) + "/status", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: status })
+    }).then(function (response) {
+      return response
+        .json()
+        .catch(function () {
+          return {};
+        })
+        .then(function (body) {
+          if (!response.ok) {
+            var error = new Error((body && body.error) || "Request failed with status " + response.status);
+            error.status = response.status;
+            error.body = body;
+            throw error;
+          }
+          return body;
+        });
+    });
+  }
+
+  return { getMyTasks: getMyTasks, updateTaskStatus: updateTaskStatus };
 })();

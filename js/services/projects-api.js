@@ -97,5 +97,62 @@ IQRAA.services.projectsApi = (function () {
     });
   }
 
-  return { getProjects: getProjects, getProjectManagers: getProjectManagers, assignPm: assignPm };
+  /* 2026-09-25 "Connect Project Workspace Team & Tasks" fix — GET
+     /api/projects/:id/tasks and GET /api/projects/:id/team (backend/
+     server.js), replacing project-workspace.js's previous
+     js/data/mock-data.js reads for those two panels. Same uncached-on-
+     every-call convention as getProjects(); both re-check the caller's
+     access to this specific project server-side (see backend/server.js's
+     isAuthorizedForProjectTasks()), so a 403 here means the page's own
+     role gate was bypassed or the project id was guessed, not a normal
+     case the frontend needs to handle beyond showing an error state. */
+  function getProjectTasks(projectId) {
+    return fetch(PROJECTS_API_BASE + "/api/projects/" + encodeURIComponent(projectId) + "/tasks", {
+      credentials: "include"
+    }).then(function (response) {
+      return response
+        .json()
+        .catch(function () {
+          return {};
+        })
+        .then(function (body) {
+          if (!response.ok) {
+            var error = new Error((body && body.error) || "Request failed with status " + response.status);
+            error.status = response.status;
+            error.body = body;
+            throw error;
+          }
+          return (body && body.tasks) || [];
+        });
+    });
+  }
+
+  function getProjectTeam(projectId) {
+    return fetch(PROJECTS_API_BASE + "/api/projects/" + encodeURIComponent(projectId) + "/team", {
+      credentials: "include"
+    }).then(function (response) {
+      return response
+        .json()
+        .catch(function () {
+          return {};
+        })
+        .then(function (body) {
+          if (!response.ok) {
+            var error = new Error((body && body.error) || "Request failed with status " + response.status);
+            error.status = response.status;
+            error.body = body;
+            throw error;
+          }
+          return (body && body.team) || [];
+        });
+    });
+  }
+
+  return {
+    getProjects: getProjects,
+    getProjectManagers: getProjectManagers,
+    assignPm: assignPm,
+    getProjectTasks: getProjectTasks,
+    getProjectTeam: getProjectTeam
+  };
 })();

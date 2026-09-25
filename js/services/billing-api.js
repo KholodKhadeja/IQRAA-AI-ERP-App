@@ -49,5 +49,40 @@ IQRAA.services.billingApi = (function () {
     });
   }
 
-  return { getBilling: getBilling };
+  /* PATCH /api/invoices/:id/link-lead (2026-09-25, "Lead -> Invoice
+     context preservation") — the application-side fix for a Lead's own
+     context getting lost on the way to the invoice the Admin creates for
+     it. The create-invoice-via-app n8n webhook (js/services/finance-
+     webhooks.js) is deliberately left untouched — it still only ever
+     receives {invoiceNumber, clientId, amount} — so once billing.js
+     confirms the invoice actually exists (via its existing
+     pollForInvoiceNumber()), it calls this instead to set that invoice's
+     real Airtable "Lead ID" link directly through this backend, the same
+     "frontend never talks to Airtable directly" rule every other write in
+     this app already follows. */
+  function linkInvoiceToLead(invoiceId, leadId) {
+    return fetch(BILLING_API_BASE + "/api/invoices/" + encodeURIComponent(invoiceId) + "/link-lead", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ leadId: leadId })
+    }).then(function (response) {
+      return response
+        .json()
+        .catch(function () {
+          return {};
+        })
+        .then(function (body) {
+          if (!response.ok) {
+            var error = new Error((body && body.error) || "Request failed with status " + response.status);
+            error.status = response.status;
+            error.body = body;
+            throw error;
+          }
+          return body;
+        });
+    });
+  }
+
+  return { getBilling: getBilling, linkInvoiceToLead: linkInvoiceToLead };
 })();

@@ -302,8 +302,14 @@ IQRAA.services.projectHelpers = (function (ns) {
               '<button type="button" class="task-card" data-task-id="' + task.id + '">' +
               '<span class="task-card__title">' + task.title + "</span>" +
               '<span class="task-card__meta">' +
-              priorityBadge(task.priority) +
-              '<span class="avatar" aria-hidden="true">' + teamMemberName(task.assigneeId).charAt(0).toUpperCase() + "</span>" +
+              /* task.priority is null when a real Tasks.Priority value
+                 (free text on that table) doesn't match one of the three
+                 known keys — falls back to the raw text in a neutral badge
+                 instead of a broken "priority.<raw>" i18n lookup. Mock
+                 tasks always have a valid key, so this never changes their
+                 rendering. */
+              (task.priority ? priorityBadge(task.priority) : task.priorityRaw ? badge(task.priorityRaw, "neutral") : "") +
+              '<span class="avatar" aria-hidden="true">' + (task.assigneeName || teamMemberName(task.assigneeId)).charAt(0).toUpperCase() + "</span>" +
               "</span>" +
               '<span class="task-card__due' + (overdue ? " task-card__due--overdue" : "") + '">' + dueLabel + "</span>" +
               "</button>"

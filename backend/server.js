@@ -409,7 +409,13 @@ app.post("/api/auth/login", requireAirtableConfigured, async function (req, res)
       id: userRecord.id,
       email: fields.Email,
       fullName: fields["Full Name"],
-      role: appRole
+      role: appRole,
+      /* Additive (2026-09-25 "Settings profile save"): PATCH /api/users/me
+         below needs somewhere to reflect a saved Phone back to the client
+         without a second fetch, and GET /api/auth/me already just returns
+         session.user as-is — so Phone rides along in the session the same
+         way fullName/email/role already do. Never used for authentication. */
+      phone: fields.Phone || null
     };
 
     return res.json({ success: true, user: req.session.user });
@@ -430,6 +436,60 @@ app.post("/api/auth/logout", function (req, res) {
 
 app.get("/api/auth/me", requireAuth, function (req, res) {
   res.json({ user: req.session.user });
+});
+
+/* PATCH /api/users/me (2026-09-25 "Settings profile save" fix) — pages/
+   settings.html's Profile form previously only ever showed a fake success
+   message and never persisted anything (no fetch call at all). Self-service
+   only: this always writes to req.session.user.id, the same real Airtable
+   Users record id every session already carries — it never accepts a
+   caller-supplied user id, so there is no way for one session to edit
+   another user's record through this route. Every role (admin/pm/
+   teamMember/client) has a Users record and can call this, matching
+   settings.html being shared by all four roles.
+
+   Deliberately excludes Email: Email is the login lookup key
+   (findUserByEmail above) and this task's explicit "do not change
+   authentication" rule rules out touching it here — the Settings email
+   field stays read-only on the frontend, see js/pages/settings.js. */
+app.patch("/api/users/me", requireAuth, requireAirtableConfigured, async function (req, res) {
+  const body = req.body || {};
+  const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
+  const phone = typeof body.phone === "string" ? body.phone.trim() : "";
+
+  if (!fullName) {
+    return res.status(400).json({ error: "fullName is required." });
+  }
+
+  try {
+    const url = "https://api.airtable.com/v0/" + AIRTABLE_BASE_ID + "/" + AIRTABLE_USERS_TABLE_ID + "/" + encodeURIComponent(req.session.user.id);
+    const response = await fetch(url, {
+      method: "PATCH",
+      headers: {
+        Authorization: "Bearer " + AIRTABLE_PAT,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ fields: { "Full Name": fullName, Phone: phone } })
+    });
+    const airtableBody = await response.json().catch(function () {
+      return {};
+    });
+    if (!response.ok) {
+      console.error("[backend] Airtable rejected the profile update:", response.status, JSON.stringify(airtableBody));
+      return res.status(502).json({
+        error: "Airtable rejected the request.",
+        airtableStatus: response.status,
+        airtableError: airtableBody && airtableBody.error
+      });
+    }
+
+    req.session.user.fullName = fullName;
+    req.session.user.phone = phone || null;
+    return res.json({ user: req.session.user });
+  } catch (networkError) {
+    console.error("[backend] Could not reach Airtable to update the profile:", networkError);
+    return res.status(502).json({ error: "Could not reach Airtable.", details: networkError.message });
+  }
 });
 
 /* ===== Users ===== */
@@ -606,6 +666,48 @@ app.get("/api/users/team", requireAuth, requireRole("admin"), requireAirtableCon
       airtableError: err.airtableError,
       details: err.airtableStatus ? undefined : err.message
     });
+  }
+});
+
+/* PATCH /api/users/:id/status (2026-09-25 "Team pause/reactivate" fix) —
+   pages/team.html's pause/reactivate button was local-only (documented as
+   such in js/pages/team.js's own file header) since there was no write
+   endpoint. Same Users table, same VALID_STATUSES/"Active"/"Inactive"
+   vocabulary POST /api/users already writes on create — this just PATCHes
+   the one field on an existing record instead. Admin-only, matching
+   Team Management's existing access restriction (requireRole("admin"),
+   same as GET /api/users/team above). */
+app.patch("/api/users/:id/status", requireAuth, requireRole("admin"), requireAirtableConfigured, async function (req, res) {
+  const status = req.body && req.body.status;
+  if (VALID_STATUSES.indexOf(status) === -1) {
+    return res.status(400).json({ error: "status must be one of: " + VALID_STATUSES.join(", ") });
+  }
+
+  try {
+    const url = "https://api.airtable.com/v0/" + AIRTABLE_BASE_ID + "/" + AIRTABLE_USERS_TABLE_ID + "/" + encodeURIComponent(req.params.id);
+    const response = await fetch(url, {
+      method: "PATCH",
+      headers: {
+        Authorization: "Bearer " + AIRTABLE_PAT,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ fields: { Status: status } })
+    });
+    const body = await response.json().catch(function () {
+      return {};
+    });
+    if (!response.ok) {
+      console.error("[backend] Airtable rejected the user status update:", response.status, JSON.stringify(body));
+      return res.status(502).json({
+        error: "Airtable rejected the request.",
+        airtableStatus: response.status,
+        airtableError: body && body.error
+      });
+    }
+    return res.json({ id: req.params.id, status: status });
+  } catch (networkError) {
+    console.error("[backend] Could not reach Airtable to update the user's status:", networkError);
+    return res.status(502).json({ error: "Could not reach Airtable.", details: networkError.message });
   }
 });
 
@@ -891,6 +993,162 @@ app.patch("/api/projects/:id/assign-pm", requireAuth, requireRole("admin"), requ
   } catch (networkError) {
     console.error("[backend] Could not reach Airtable to assign a Project Manager:", networkError);
     return res.status(502).json({ error: "Could not reach Airtable.", details: networkError.message });
+  }
+});
+
+/* GET /api/projects/:id/tasks + GET /api/projects/:id/team (2026-09-25
+   "Connect Project Workspace Team & Tasks to real Airtable data") — the
+   Project Workspace's Tasks and Team panels previously read
+   js/data/mock-data.js. Both reuse tables/relationships this file already
+   has fully wired (Tasks table, Tasks.Project, Tasks.Assignee, Users
+   table) — no new table, no new Airtable field, no n8n involvement.
+
+   Access control (both routes, identical): a session may only see a
+   project's tasks/team if it could already see that project via
+   GET /api/projects — admin (any project), pm (only if the project's
+   "Project Manager" link includes them, same pmIds check GET /api/projects
+   already applies), teamMember (only if they have at least one Task
+   assigned within this project — the same task-derived project-membership
+   rule GET /api/projects' own teamMember branch and GET /api/tasks/my both
+   already use), client (never — CLAUDE.md §4/§9: the Client Portal is a
+   deliberately separate, client-safe render path that never reuses the
+   internal task board/team roster). Re-checked here rather than trusted
+   from the frontend, since these are single-project-by-id routes a session
+   could otherwise call directly with a guessed id. */
+function isAuthorizedForProjectTasks(role, sessionUserId, project, projectTasks) {
+  if (role === "admin") return true;
+  if (role === "pm") return (project.pmIds || []).indexOf(sessionUserId) !== -1;
+  if (role === "teamMember") {
+    return projectTasks.some(function (t) {
+      return (t.assigneeIds || []).indexOf(sessionUserId) !== -1;
+    });
+  }
+  return false;
+}
+
+app.get("/api/projects/:id/tasks", requireAuth, requireProjectsConfigured, async function (req, res) {
+  try {
+    const [projectRecords, taskRecords, userRecords] = await Promise.all([
+      fetchAllProjectRecords(),
+      fetchAllRecordsGeneric(AIRTABLE_TASKS_TABLE_ID),
+      fetchAllUserRecords()
+    ]);
+
+    const projectRecord = projectRecords.filter(function (r) {
+      return r.id === req.params.id;
+    })[0];
+    if (!projectRecord) {
+      return res.status(404).json({ error: "Project not found." });
+    }
+    const project = mapProjectRecord(projectRecord);
+
+    const projectTasks = taskRecords.map(mapDashboardTaskRecord).filter(function (t) {
+      return (t.projectIds || []).indexOf(project.id) !== -1;
+    });
+
+    if (!isAuthorizedForProjectTasks(req.session.user.role, req.session.user.id, project, projectTasks)) {
+      return res.status(403).json({ error: "Not authorized to view this project's tasks." });
+    }
+
+    const usersById = {};
+    userRecords.forEach(function (r) {
+      usersById[r.id] = (r.fields && r.fields["Full Name"]) || null;
+    });
+
+    const tasks = projectTasks.map(function (t) {
+      const assigneeId = (t.assigneeIds || [])[0] || null;
+      return {
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        priority: t.priority,
+        description: t.description,
+        dueDate: t.dueDate,
+        assigneeId: assigneeId,
+        assigneeName: assigneeId ? usersById[assigneeId] || null : null
+      };
+    });
+
+    return res.json({ tasks: tasks });
+  } catch (err) {
+    console.error("[backend] Failed to fetch a Project's Tasks from Airtable:", err);
+    return res.status(502).json({
+      error: "Could not retrieve tasks from Airtable.",
+      airtableStatus: err.airtableStatus,
+      airtableError: err.airtableError,
+      details: err.airtableStatus ? undefined : err.message
+    });
+  }
+});
+
+app.get("/api/projects/:id/team", requireAuth, requireProjectsConfigured, async function (req, res) {
+  try {
+    const [projectRecords, taskRecords, userRecords] = await Promise.all([
+      fetchAllProjectRecords(),
+      fetchAllRecordsGeneric(AIRTABLE_TASKS_TABLE_ID),
+      fetchAllUserRecords()
+    ]);
+
+    const projectRecord = projectRecords.filter(function (r) {
+      return r.id === req.params.id;
+    })[0];
+    if (!projectRecord) {
+      return res.status(404).json({ error: "Project not found." });
+    }
+    const project = mapProjectRecord(projectRecord);
+
+    const projectTasks = taskRecords.map(mapDashboardTaskRecord).filter(function (t) {
+      return (t.projectIds || []).indexOf(project.id) !== -1;
+    });
+
+    if (!isAuthorizedForProjectTasks(req.session.user.role, req.session.user.id, project, projectTasks)) {
+      return res.status(403).json({ error: "Not authorized to view this project's team." });
+    }
+
+    /* No direct Project<->Team link exists on the real Projects table
+       (only "Project Manager" — see get_table_schema) — the team is
+       derived as the set of real Users assigned at least one Task within
+       this project, the same relationship GET /api/projects' teamMember
+       branch already treats as "this project's team" for access purposes.
+       Not the Project Manager themself — that's already shown separately
+       in the header (project.pmName). */
+    const usersById = {};
+    userRecords.forEach(function (r) {
+      usersById[r.id] = r;
+    });
+
+    const memberIds = [];
+    projectTasks.forEach(function (t) {
+      (t.assigneeIds || []).forEach(function (id) {
+        if (memberIds.indexOf(id) === -1) memberIds.push(id);
+      });
+    });
+
+    const team = memberIds
+      .map(function (id) {
+        return usersById[id];
+      })
+      .filter(Boolean)
+      .map(function (r) {
+        const fields = r.fields || {};
+        return {
+          id: r.id,
+          fullName: fields["Full Name"] || null,
+          roleKey: mapAirtableRoleToTeamRoleKey(fields.Role),
+          email: fields.Email || null,
+          phone: fields.Phone || null
+        };
+      });
+
+    return res.json({ team: team });
+  } catch (err) {
+    console.error("[backend] Failed to fetch a Project's Team from Airtable:", err);
+    return res.status(502).json({
+      error: "Could not retrieve the project team from Airtable.",
+      airtableStatus: err.airtableStatus,
+      airtableError: err.airtableError,
+      details: err.airtableStatus ? undefined : err.message
+    });
   }
 });
 
@@ -1536,7 +1794,13 @@ function mapDashboardTaskRecord(record) {
     assigneeIds: fields.Assignee || [],
     priority: fields.Priority || null,
     status: airtableSelectName(fields.Status),
-    dueDate: fields["Due Date"] || null
+    dueDate: fields["Due Date"] || null,
+    /* "description" is additive too (2026-09-25 "Connect Project Workspace
+       Team & Tasks" fix) — GET /api/projects/:id/tasks is the first call
+       site that needs Tasks.Description (multilineText) for the task
+       detail modal; every existing call site ignores fields it doesn't
+       read, same as title/assigneeIds/priority above. */
+    description: fields.Description || null
   };
 }
 
@@ -2349,6 +2613,75 @@ app.get("/api/billing", requireAuth, requireRole("admin"), requireBillingConfigu
   }
 });
 
+/* PATCH /api/invoices/:id/link-lead (2026-09-25, "Lead -> Invoice context
+   preservation", application-side only — n8n is locked for this task, no
+   workflow/node may be touched). Root cause traced before writing this:
+   the "create-invoice-via-app" n8n webhook (WF1) only ever accepted
+   {invoiceNumber, clientId, amount} from js/pages/billing.js and has no
+   Lead ID field mapping at all — that webhook contract is left exactly as
+   is. Instead, once billing.js confirms (via its existing
+   pollForInvoiceNumber() poll of GET /api/billing) that WF1 actually
+   created the Invoice record, it now calls this endpoint to set that
+   invoice's real "Lead ID" link directly — the same direct-Airtable-write
+   pattern this file already uses for Users (POST /api/users), PM
+   assignment (PATCH /api/projects/:id/assign-pm) and Lead status (PATCH
+   /api/leads/:id/status): the backend holds the PAT and writes Airtable
+   itself, nothing goes through n8n for this link.
+
+   leadId is re-validated against a real Leads record on this server
+   (never trusted from the request body alone), same "don't let a session
+   link to a nonexistent/wrong record just by editing the request" rule as
+   assign-pm's pmId check above. */
+app.patch(
+  "/api/invoices/:id/link-lead",
+  requireAuth,
+  requireRole("admin"),
+  requireBillingConfigured,
+  requireLeadsConfigured,
+  async function (req, res) {
+    const leadId = req.body && req.body.leadId;
+    if (!leadId || typeof leadId !== "string") {
+      return res.status(400).json({ error: "leadId is required." });
+    }
+
+    try {
+      const leadRecords = await fetchAllRecordsGeneric(AIRTABLE_LEADS_TABLE_ID);
+      const leadExists = leadRecords.some(function (r) {
+        return r.id === leadId;
+      });
+      if (!leadExists) {
+        return res.status(400).json({ error: "leadId does not refer to an existing Lead." });
+      }
+
+      const url =
+        "https://api.airtable.com/v0/" + AIRTABLE_BASE_ID + "/" + AIRTABLE_INVOICES_TABLE_ID + "/" + encodeURIComponent(req.params.id);
+      const response = await fetch(url, {
+        method: "PATCH",
+        headers: {
+          Authorization: "Bearer " + AIRTABLE_PAT,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ fields: { "Lead ID": [leadId] } })
+      });
+      const body = await response.json().catch(function () {
+        return {};
+      });
+      if (!response.ok) {
+        console.error("[backend] Airtable rejected the Invoice<->Lead link:", response.status, JSON.stringify(body));
+        return res.status(502).json({
+          error: "Airtable rejected the request.",
+          airtableStatus: response.status,
+          airtableError: body && body.error
+        });
+      }
+      return res.json({ invoiceId: req.params.id, leadId: leadId });
+    } catch (networkError) {
+      console.error("[backend] Could not reach Airtable to link Invoice to Lead:", networkError);
+      return res.status(502).json({ error: "Could not reach Airtable.", details: networkError.message });
+    }
+  }
+);
+
 /* ===== Tasks — My Tasks (2026-09-23 "Connect My Tasks to Airtable") =====
 
    pages/my-tasks.html -> GET /api/tasks/my -> this server -> Airtable
@@ -2364,7 +2697,20 @@ app.get("/api/billing", requireAuth, requireRole("admin"), requireBillingConfigu
    req.session.user.id directly and filters Tasks whose Assignee array
    contains it, the same "join by real record id, not a display id"
    pattern /api/dashboard/pm already uses for pmId against Projects'
-   Project Manager field. Never accepts a user id from the request. */
+   Project Manager field. Never accepts a user id from the request.
+
+   requireRole("teamMember") added 2026-09-25 ("GET /api/tasks/my role
+   protection" fix) — this route previously only had requireAuth, so any
+   authenticated role (including Client) could call it, inconsistent with
+   every other role-scoped endpoint in this file (GET /api/dashboard/pm is
+   requireRole("pm"), GET /api/clients/me is requireRole("client"), etc.).
+   pages/my-tasks.html (the only caller) is already teamMember-only per
+   its own window.IQRAA_ROLE gate, so this brings the backend in line with
+   the frontend's already-intended access rule rather than changing it —
+   a PM's own task visibility is unaffected, since PMs were never meant to
+   use this per-assignee endpoint in the first place (CLAUDE.md §9: PM's
+   "Tasks" nav item is a still-unbuilt separate, cross-project view, not
+   this one). */
 
 function requireTasksConfigured(req, res, next) {
   const missing = [];
@@ -2381,7 +2727,9 @@ function requireTasksConfigured(req, res, next) {
   next();
 }
 
-app.get("/api/tasks/my", requireAuth, requireTasksConfigured, async function (req, res) {
+var TASK_STATUS_VALUES = ["Not Started", "In Progress", "Waiting", "Review", "Completed"];
+
+app.get("/api/tasks/my", requireAuth, requireRole("teamMember"), requireTasksConfigured, async function (req, res) {
   try {
     const userId = req.session.user.id;
 
@@ -2430,6 +2778,67 @@ app.get("/api/tasks/my", requireAuth, requireTasksConfigured, async function (re
       airtableError: err.airtableError,
       details: err.airtableStatus ? undefined : err.message
     });
+  }
+});
+
+/* PATCH /api/tasks/:id/status (2026-09-25 "My Tasks status update" fix) —
+   js/pages/my-tasks.js's quick-status <select> previously only updated the
+   fetched-in-memory row (documented local-only simplification in that
+   file's header) since no write endpoint existed. Same Tasks table
+   GET /api/tasks/my already reads, same Airtable REST PATCH-by-id shape
+   as every other status-write route in this file (Lead/Invoice/User
+   status above).
+
+   requireRole("teamMember") matches GET /api/tasks/my's own gate above —
+   this is the same page's own write half, not a new access rule. On top
+   of the role check, the task's real Tasks.Assignee is re-fetched and
+   checked against req.session.user.id (never trusted from the request
+   body/URL alone) so one team member can't flip another's task by
+   guessing a record id — the same "don't let a session act on a record
+   it doesn't own" rule as assign-pm's pmId re-validation. */
+app.patch("/api/tasks/:id/status", requireAuth, requireRole("teamMember"), requireTasksConfigured, async function (req, res) {
+  const status = req.body && req.body.status;
+  if (TASK_STATUS_VALUES.indexOf(status) === -1) {
+    return res.status(400).json({ error: "status must be one of: " + TASK_STATUS_VALUES.join(", ") });
+  }
+
+  try {
+    const taskRecords = await fetchAllRecordsGeneric(AIRTABLE_TASKS_TABLE_ID);
+    const taskRecord = taskRecords.filter(function (r) {
+      return r.id === req.params.id;
+    })[0];
+    if (!taskRecord) {
+      return res.status(404).json({ error: "Task not found." });
+    }
+    const assigneeIds = (taskRecord.fields && taskRecord.fields.Assignee) || [];
+    if (assigneeIds.indexOf(req.session.user.id) === -1) {
+      return res.status(403).json({ error: "Not authorized to update this task." });
+    }
+
+    const url = "https://api.airtable.com/v0/" + AIRTABLE_BASE_ID + "/" + AIRTABLE_TASKS_TABLE_ID + "/" + encodeURIComponent(req.params.id);
+    const response = await fetch(url, {
+      method: "PATCH",
+      headers: {
+        Authorization: "Bearer " + AIRTABLE_PAT,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ fields: { Status: status } })
+    });
+    const body = await response.json().catch(function () {
+      return {};
+    });
+    if (!response.ok) {
+      console.error("[backend] Airtable rejected the task status update:", response.status, JSON.stringify(body));
+      return res.status(502).json({
+        error: "Airtable rejected the request.",
+        airtableStatus: response.status,
+        airtableError: body && body.error
+      });
+    }
+    return res.json({ id: req.params.id, status: status });
+  } catch (networkError) {
+    console.error("[backend] Could not reach Airtable to update the task's status:", networkError);
+    return res.status(502).json({ error: "Could not reach Airtable.", details: networkError.message });
   }
 });
 

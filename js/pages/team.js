@@ -31,11 +31,12 @@
    precedent for yet, so it's left out rather than wired to a bare native
    confirm() with no design behind it.
 
-   The pause/reactivate toggle remains local-only (never persisted to
-   Airtable, same as before this task — there is no PATCH /api/users/:id
-   endpoint, and building one is out of this task's scope) but now uses
-   the real Active/Inactive vocabulary instead of the old, non-existent
-   "Paused" Airtable option. */
+   2026-09-25 "Team pause/reactivate" fix: the pause/reactivate toggle now
+   persists to Airtable via js/services/users-api.js's updateUserStatus()
+   (PATCH /api/users/:id/status on the existing backend, Admin-only, same
+   as every other write on this page) instead of only updating the
+   in-memory row — still the real Active/Inactive vocabulary the previous
+   task already switched to. */
 window.IQRAA = window.IQRAA || {};
 
 (function (ns) {
@@ -142,8 +143,21 @@ window.IQRAA = window.IQRAA || {};
             return m.id === btn.getAttribute("data-toggle-status");
           })[0];
           if (!member) return;
-          member.status = member.status === "active" ? "inactive" : "active";
-          renderTable();
+          var newStatus = member.status === "active" ? "inactive" : "active";
+          var airtableStatus = newStatus === "active" ? "Active" : "Inactive";
+
+          btn.disabled = true;
+          usersApi
+            .updateUserStatus(member.id, airtableStatus)
+            .then(function () {
+              member.status = newStatus;
+              renderTable();
+            })
+            .catch(function (err) {
+              console.error("[team] Failed to update status in Airtable:", err);
+              btn.disabled = false;
+              window.alert(ns.i18n.t("team.statusUpdateError"));
+            });
         });
       });
     }

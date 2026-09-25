@@ -63,6 +63,28 @@ window.IQRAA = window.IQRAA || {};
     var billingData = { kpis: { invoices: {}, payments: {} }, invoices: [], payments: [] };
     var clientsList = [];
 
+    /* Lead -> Invoice context preservation (2026-09-25, application-side
+       fix — the create-invoice-via-app n8n webhook is locked/untouched
+       for this task). js/pages/leads.js's "Waiting for first payment" CTA
+       now carries the originating Lead's real Airtable record id (and
+       display name, for the note below) as "?leadId="/"?leadName=" —
+       previously a plain "billing.html" link lost that context the
+       instant the Admin clicked through, which is exactly why an invoice
+       created here had no way to end up linked back to its Lead.
+       pendingLeadId is consumed exactly once, by the very next invoice
+       this page creates (see openCreateInvoiceForm's submit handler
+       below), via js/services/billing-api.js's linkInvoiceToLead() — a
+       direct backend write, not the n8n webhook. The query params are
+       stripped from the visible URL immediately so a later page reload on
+       this same tab can never silently reapply them to an unrelated
+       invoice. */
+    var pendingLeadParams = new URLSearchParams(window.location.search);
+    var pendingLeadId = pendingLeadParams.get("leadId") || null;
+    var pendingLeadName = pendingLeadParams.get("leadName") || null;
+    if (pendingLeadId) {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+
     var invSearch = document.getElementById("invoices-search");
     var invStatusFilter = document.getElementById("invoices-filter-status");
     var invSort = document.getElementById("invoices-sort");
@@ -460,6 +482,23 @@ window.IQRAA = window.IQRAA || {};
         return;
       }
 
+      /* Missing-Lead-ID safety (audit fix, 2026-09-25): the live
+         payment-via-app-update workflow's last step reads the Invoice's
+         own "Lead ID" link to decide which Lead to mark "First payment
+         paid" — with no Lead linked, that step has nothing to update and
+         the run never reaches its success response, even though the
+         earlier "set Invoice Status to PAID" step already committed. That
+         leaves the Invoice silently marked PAID in Airtable while the app
+         shows a failure, inviting a confusing retry. inv.leadId comes
+         straight from GET /api/billing's existing Lead-link resolution
+         (server.js) — no new data source. Blocking here, before ever
+         calling the webhook, is the one thing the app can safely do about
+         this without touching n8n. */
+      if (!inv.leadId) {
+        ns.components.modal.open(ns.i18n.t("billing.updatePaymentTitle") + " " + (inv.invoiceNumber || PLACEHOLDER), '<p class="note-text">' + ns.i18n.t("billing.updatePaymentNoLead") + "</p>");
+        return;
+      }
+
       var idp = "payment-update-form";
       /* Only "PAID" is meaningful end-to-end (the payment-via-app-update
          n8n workflow sets the Invoice's own Status to whatever is sent
@@ -694,7 +733,12 @@ window.IQRAA = window.IQRAA || {};
             .join("")
         : '<option value="">' + ns.i18n.t("billing.noClientsAvailable") + "</option>";
 
+      var leadNoteHtml = pendingLeadId
+        ? '<p class="note-text">' + ns.i18n.t("billing.linkedToLeadNote") + " " + (pendingLeadName || "") + "</p>"
+        : "";
+
       var fields =
+        leadNoteHtml +
         '<div class="text-field"><label class="text-field__label" for="' + idp + '-client">' + ns.i18n.t("billingFields.client") +
         ' <span class="text-field__required" aria-hidden="true">*</span></label>' +
         '<select id="' + idp + '-client" class="select">' + clientOptionsHtml + "</select>" +
@@ -799,8 +843,38 @@ window.IQRAA = window.IQRAA || {};
           .then(function (createdInvoice) {
             cancelBtn.disabled = false;
             if (createdInvoice) {
-              ns.components.modal.close();
-              return;
+              /* Consumed exactly once, by this one invoice, win or lose —
+                 see the pendingLeadId file-header comment above. A failed
+                 link must never be reported as a failed invoice creation:
+                 the Invoice record itself already exists and is valid at
+                 this point, only the Lead relationship is at risk. */
+              var leadIdToLink = pendingLeadId;
+              pendingLeadId = null;
+              if (!leadIdToLink) {
+                ns.components.modal.close();
+                return;
+              }
+              return api
+                .linkInvoiceToLead(createdInvoice.id, leadIdToLink)
+                .then(function () {
+                  return api.getBilling();
+                })
+                .then(function (body) {
+                  billingData = body;
+                  renderAll();
+                })
+                .catch(function (linkError) {
+                  /* Same "log for operators, never undo an otherwise-
+                     successful write, don't block the user" precedent as
+                     backend/server.js's updateLastLogin() — the Invoice
+                     itself is real and already created; only the Lead
+                     link is at risk, and a failure here must not make the
+                     Admin think invoice creation itself failed. */
+                  console.error("[billing] Invoice created but failed to link it to the originating Lead:", linkError);
+                })
+                .then(function () {
+                  ns.components.modal.close();
+                });
             }
             statusEl.hidden = true;
             setSubmitting(submitBtn, false, "leads.saveButton");

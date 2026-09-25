@@ -138,13 +138,22 @@ window.IQRAA = window.IQRAA || {};
        payment-via-app-update automation described in the file header);
        "First payment paid"/"Proccessed" get a short informational note
        only, since neither is ever set from this page. */
+
+    /* Carries this lead's real Airtable record id (and display name, for
+       billing.js's confirmation note) through to Billing as a query
+       string (2026-09-25 "Lead -> Invoice context preservation") — see
+       js/pages/billing.js's pendingLeadId for the consuming side. */
+    function billingLinkHref(lead) {
+      return "billing.html?leadId=" + encodeURIComponent(lead.id) + "&leadName=" + encodeURIComponent(lead.name || "");
+    }
+
     function actionCellHtml(lead) {
       var nextStatus = LEADS_NEXT_STATUS[lead.status];
       if (nextStatus) {
         return '<button type="button" class="btn btn--secondary" data-advance-status="' + lead.id + '">' + ns.i18n.t("leads.markWaitingPaymentAction") + "</button>";
       }
       if (lead.status === "Waiting for first payment") {
-        return '<a class="btn btn--secondary" href="billing.html">' + ns.i18n.t("leads.goToBillingAction") + "</a>";
+        return '<a class="btn btn--secondary" href="' + billingLinkHref(lead) + '">' + ns.i18n.t("leads.goToBillingAction") + "</a>";
       }
       if (lead.status === "First payment paid") {
         return '<span class="note-text">' + ns.i18n.t("leads.waitingForAutomationNote") + "</span>";
@@ -284,14 +293,24 @@ window.IQRAA = window.IQRAA || {};
     /* Per-status Admin guidance panel (GUIDANCE_BY_STATUS) — title + body
        explaining this status and what happens next, a CTA link to Billing
        for "Waiting for first payment" (navigation only, never a status
-       change from here), and the linked invoice summary for "Proccessed". */
+       change from here), and the linked invoice summary for "Proccessed".
+
+       The Billing link carries this lead's own real Airtable record id as
+       a "?leadId=" query param (2026-09-25 "Lead -> Invoice context
+       preservation") — previously a plain "billing.html" link lost which
+       lead the Admin was invoicing the moment they clicked through, which
+       is exactly why an invoice created from here had no way to end up
+       linked back to its originating Lead. billing.js reads this param to
+       carry the lead through invoice creation and link the two once the
+       invoice actually exists — see js/services/billing-api.js's
+       linkInvoiceToLead(). */
     function guidancePanelHtml(lead) {
       var guidance = GUIDANCE_BY_STATUS[lead.status];
       if (!guidance) return "";
       return (
         "<p><strong>" + ns.i18n.t(guidance.titleKey) + "</strong></p>" +
         '<p class="note-text">' + ns.i18n.t(guidance.bodyKey) + "</p>" +
-        (guidance.cta === "billing" ? '<p><a class="btn btn--secondary" href="billing.html">' + ns.i18n.t("leads.goToBillingAction") + "</a></p>" : "") +
+        (guidance.cta === "billing" ? '<p><a class="btn btn--secondary" href="' + billingLinkHref(lead) + '">' + ns.i18n.t("leads.goToBillingAction") + "</a></p>" : "") +
         (guidance.showInvoice ? invoiceInfoHtml(lead) : "")
       );
     }

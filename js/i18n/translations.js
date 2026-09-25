@@ -510,6 +510,7 @@ IQRAA.i18n.translations = {
       loading: "טוענים משימות מ-Airtable…",
       loadError: "לא הצלחנו לטעון את המשימות מ-Airtable כרגע.",
       retry: "ניסיון חוזר",
+      statusUpdateError: "לא הצלחנו לעדכן את סטטוס המשימה כרגע. נסו שוב.",
     },
     billing: {
       invoicesSnapshotHeading: "תמונת מצב — חשבוניות",
@@ -552,6 +553,7 @@ IQRAA.i18n.translations = {
       createInvoiceButton: "חשבונית חדשה",
       recordPaymentButton: "רישום תשלום",
       createInvoiceTitle: "יצירת חשבונית",
+      linkedToLeadNote: "החשבונית תקושר אוטומטית לליד:",
       recordPaymentTitle: "רישום תשלום",
       documentLink: "צפייה במסמך",
       noDocument: "אין מסמך מצורף",
@@ -583,6 +585,7 @@ IQRAA.i18n.translations = {
       updatePaymentNote: "הפעולה שולחת בקשה ל-webhook הקיים, מסמנת את החשבונית כשולמה, ומעדכנת בהתאם את הליד המקושר אליה.",
       updatePaymentAlreadyPaid: "החשבונית הזו כבר מסומנת כשולמה — לא ניתן לבצע עליה תשלום נוסף.",
       updatePaymentNotConfirmed: "לא התקבל אישור מפורש מה-webhook שהתשלום בוצע. ודאו שהחשבונית מקושרת לליד תקין ונסו שוב.",
+      updatePaymentNoLead: "לחשבונית זו אין ליד מקושר (Lead ID) — לא ניתן לבצע עליה תשלום, כי תהליך האוטומציה הקיים חייב לעדכן את סטטוס הליד המקושר ויכשל ללא קישור כזה. יש לקשר ליד לחשבונית זו בטבלת Airtable לפני ביצוע הפעולה.",
     },
     billingFields: {
       invoiceNumber: "מספר חשבונית",
@@ -655,6 +658,7 @@ IQRAA.i18n.translations = {
       loadError: "לא הצלחנו לטעון את חברי הצוות מ-Airtable כרגע.",
       retry: "ניסיון חוזר",
       emptyResults: "לא נמצאו חברי צוות פנימיים.",
+      statusUpdateError: "לא הצלחנו לעדכן את הסטטוס כרגע. נסו שוב.",
     },
     clientOverview: {
       sectionPendingActions: "פעולות ממתינות",
@@ -684,7 +688,9 @@ IQRAA.i18n.translations = {
     settings: {
       profileHeading: "פרופיל",
       emailLabel: "כתובת אימייל",
+      emailReadonlyNote: "לא ניתן לשנות את כתובת האימייל ממסך זה.",
       saveSuccess: "הפרטים נשמרו בהצלחה.",
+      saveError: "שמירת הפרטים נכשלה כרגע. נסו שוב.",
       preferencesHeading: "העדפות",
       notificationsHeading: "התראות",
       notifyEmailLabel: 'התראות בדוא"ל על עדכוני פרויקט',

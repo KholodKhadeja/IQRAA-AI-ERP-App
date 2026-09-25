@@ -186,6 +186,18 @@ Status vocabulary and workflow rules, confirmed against the real schema (`get_ta
 
 **`"Waiting for first payment"`, `"First payment paid"` and `"Proccessed"` are spelled exactly like that in the real Airtable Status field** (confirmed via `get_table_schema`, not guessed — this project has been bitten by exactly this kind of casing mismatch before) — see `LEADS_LIST_STATUSES`'s comment in `server.js`. The Meetings table itself is untouched by this change — meetings still happen outside IQRAA (CLAUDE.md §6) and this flow never reads or writes it.
 
+## Invoice ↔ Lead linking (added 2026-09-25, "Lead → Invoice context preservation")
+
+Application-side fix for a gap the audit surfaced: `pages/billing.html`'s "Create Invoice" flow POSTs `{invoiceNumber, clientId, amount}` to the real `create-invoice-via-app` n8n webhook (WF1) — that webhook's own node graph was read directly and confirmed to have **no** `Lead ID` field mapping anywhere, and its contract is intentionally left untouched here (n8n is locked for this task). So once an invoice is created from `pages/leads.html`'s "Waiting for first payment" flow, the resulting Invoice record had no way to end up linked back to the Lead that started it — that link had to be added by hand directly in Airtable.
+
+Fixed entirely on the application side: `js/pages/leads.js`'s Billing CTA now carries the originating Lead's real Airtable record id (and name) as `?leadId=`/`?leadName=` on the link, `js/pages/billing.js` reads it, and once its existing `pollForInvoiceNumber()` polling confirms the WF1-created Invoice actually exists, it calls this endpoint to set the link directly — a normal backend→Airtable write, the same pattern already used for Users/PM-assignment/Lead-status above.
+
+| Endpoint | Auth required | Behavior |
+|---|---|---|
+| `PATCH /api/invoices/:id/link-lead` | Yes, Admin role | Body `{leadId}`. Re-validates `leadId` against a real Leads record server-side (`400` if it doesn't resolve to one — same "never trust a body id alone" rule as `assign-pm`'s `pmId` check) before writing `"Lead ID": [leadId]` to the given Invoices record in Airtable. Returns `{invoiceId, leadId}`. |
+
+Not called for every invoice — only when `billing.html` was reached via a Lead's context. A regular "Create Invoice" for an existing Client (no Lead involved) never calls this endpoint, and `GET /api/billing` already resolved/exposed `invoice.leadId`/`invoice.leadName` before this task (see the Billing section above) — this endpoint is the write half that was missing.
+
 ## Project Manager assignment (added 2026-09-24, live-verified)
 
 `pages/project-workspace.html`'s "assign/reassign PM" control (CLAUDE.md §19g) uses two endpoints, both Admin-only:
@@ -196,6 +208,34 @@ Status vocabulary and workflow rules, confirmed against the real schema (`get_ta
 | `PATCH /api/projects/:id/assign-pm` | Yes, Admin role | Body `{pmId}`. Re-validates `pmId` against a real, currently-Active PM user record server-side (`400` if it doesn't resolve to one — this stops a Client/Team-Member/deactivated/nonexistent id from being linked just by editing the request) before writing `"Project Manager": [pmId]` to the given Projects record in Airtable. Returns `{project}` in the same shape as `GET /api/projects`' items (includes the freshly-resolved `pmName`). Only ever touches the one field — it does not also move `Status`/`Current Stage`, unlike the old mock-data `assignPm()` CLAUDE.md §10 used to describe. |
 
 Live-verified against the real base (2026-09-24): `GET /api/users/pms` returned the one real active PM record; `PATCH .../assign-pm` against a real, then-unassigned project persisted (`Project Manager` field set, `pmName` resolved correctly on the next `GET /api/projects`), then the test project was reverted to unassigned via a direct Airtable call so no test data was left behind; a bogus id and a real Client record's id were both rejected `400`; a PM-role session got `403` from both endpoints; no session got `401` from both.
+
+## Final cleanup pass (2026-09-25) — profile save, task status, pause/reactivate, task role protection
+
+Four small, previously-local-only or missing writes, each using the existing Users/Tasks tables — no new tables, no n8n involvement.
+
+| Endpoint | Auth required | Behavior |
+|---|---|---|
+| `PATCH /api/users/me` | Yes, any role | Body `{fullName, phone}`. Self-service only — always writes to `req.session.user.id`, never a caller-supplied id, so one session can never edit another user's record. Deliberately excludes `Email` (the login lookup key — out of scope per this task's "do not change authentication" rule). Updates `req.session.user` in place so the next `GET /api/auth/me` reflects the change without a re-login. Backs `pages/settings.html`'s Profile save, which previously showed a fake success message and persisted nothing. |
+| `PATCH /api/users/:id/status` | Yes, Admin role | Body `{status:"Active"\|"Inactive"}` (`VALID_STATUSES`, same vocabulary `POST /api/users` already writes on create). Backs `pages/team.html`'s pause/reactivate button, previously local-only (in-memory only, never persisted). |
+| `PATCH /api/tasks/:id/status` | Yes, teamMember role | Body `{status}`, one of `TASK_STATUS_VALUES` ("Not Started"/"In Progress"/"Waiting"/"Review"/"Completed"). Re-validates the task's real `Assignee` link against `req.session.user.id` server-side (`403` if the caller isn't actually assigned to it) before writing `Status`. Backs `pages/my-tasks.html`'s quick-status `<select>`, previously local-only. |
+| `GET /api/tasks/my` | Yes, **teamMember role** (was: any authenticated role) | Unchanged behavior otherwise — this only closes a role-check gap found during the same pass. The route was already scoped to the caller's own `req.session.user.id` (so no other user's data was ever exposed), but it had no `requireRole` at all, inconsistent with every other role-scoped endpoint in this file. `pages/my-tasks.html`, its only caller, is already teamMember-only on the frontend, so this brings the backend in line with the page's existing intent rather than changing who can see what. |
+
+`req.session.user.phone` is new (set at login from the Users record's `Phone` field, alongside the existing `id`/`email`/`fullName`/`role`) purely so `PATCH /api/users/me` has somewhere to reflect a saved phone number back to the client without a second round trip — never used for authentication.
+
+Live-verified against the real base (2026-09-25): `PATCH /api/users/me` persisted a Full Name + Phone change on a real test user, confirmed via a follow-up `GET /api/auth/me` in the same session and again after a fresh login; `PATCH /api/users/:id/status` toggled a real test user Active → Inactive → Active, each confirmed via `GET /api/users/team`; `PATCH /api/tasks/:id/status` moved a real task through two status values, confirmed via a page reload of `pages/my-tasks.html`, and a second team member's session got `403` attempting to update a task not assigned to them; `GET /api/tasks/my` returned `403` for an Admin/PM/Client session and `200` for a teamMember session, both against the same test users used elsewhere in this file.
+
+## Project Workspace Tasks & Team (added 2026-09-25, "Connect Project Workspace Team & Tasks to real Airtable data")
+
+`pages/project-workspace.html`'s Tasks and Team panels previously read `js/data/mock-data.js`. Both now come from the existing Tasks table via two new, single-project, read-only endpoints — no new table, no new Airtable field, no n8n involvement. Meetings & Decisions and History on the same page are explicitly untouched by this task and still read mock data.
+
+| Endpoint | Auth required | Behavior |
+|---|---|---|
+| `GET /api/projects/:id/tasks` | Yes, see below | Returns every Task linked to this Project (`Tasks.Project`), each with `{id, title, status, priority, description, dueDate, assigneeId, assigneeName}` — `status`/`priority` are the raw Airtable option/free-text values (same convention as `GET /api/tasks/my`), and `assigneeName` is resolved via a Users-table join so the frontend never has to. |
+| `GET /api/projects/:id/team` | Yes, see below | Returns the distinct set of real Users who have at least one Task assigned within this Project — `{id, fullName, roleKey, email, phone}` each. There is no direct Project↔Team link on the real Projects table (only "Project Manager"), so this reuses the same Tasks.Assignee/Tasks.Project relationship `GET /api/projects`' own teamMember-scoping branch and `GET /api/tasks/my` already rely on, per this task's explicit "use the simplest existing relationship, don't invent one" instruction. Does not include the Project Manager themselves — that's already shown separately in the page header (`project.pmName`). |
+
+Both routes share the same access check (`isAuthorizedForProjectTasks()` in `server.js`), re-verified server-side rather than trusted from the frontend, since a single-project-by-id route can be called directly with a guessed id: `404` if the project doesn't exist; otherwise `admin` → any project; `pm` → only if the project's `Project Manager` link includes them; `teamMember` → only if the returned task set includes at least one Task assigned to them; `client` → always `403` (the Client Portal is a deliberately separate, client-safe render path — CLAUDE.md §4/§9 — that must never receive the internal task board or team roster).
+
+Live-verified against the real base (2026-09-25): both endpoints returned real tasks/team for a real project as Admin; a PM got `200` for their own project and `403` for an unrelated one; a team member assigned to a task in the project got `200`, one with no task in it got `403`; a Client session got `403`; an unauthenticated request got `401`; a nonexistent project id got `404`.
 
 ## Security notes
 

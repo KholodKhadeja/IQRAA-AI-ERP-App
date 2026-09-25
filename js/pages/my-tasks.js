@@ -21,7 +21,14 @@
    free text on the real table (not a constrained select) — unlike
    Status, there's no guaranteed 1:1 mapping to this page's low/medium/high
    filter, so a priority that doesn't match one of those three keys is
-   still shown (as its raw text) rather than dropped or crashing. */
+   still shown (as its raw text) rather than dropped or crashing.
+
+   2026-09-25 "My Tasks status update" fix: the quick-status <select> now
+   persists to Airtable via js/services/tasks-api.js's updateTaskStatus()
+   (PATCH /api/tasks/:id/status on the existing backend) instead of only
+   updating the in-memory row — STATUS_KEY_TO_LABEL below is
+   STATUS_LABEL_TO_KEY's reverse, needed to send the real Airtable option
+   text back on save. */
 window.IQRAA = window.IQRAA || {};
 
 (function (ns) {
@@ -39,6 +46,10 @@ window.IQRAA = window.IQRAA || {};
       "Review": "review",
       "Completed": "completed"
     };
+    var STATUS_KEY_TO_LABEL = {};
+    Object.keys(STATUS_LABEL_TO_KEY).forEach(function (label) {
+      STATUS_KEY_TO_LABEL[STATUS_LABEL_TO_KEY[label]] = label;
+    });
 
     var searchInput = document.getElementById("my-tasks-search");
     var statusSelect = document.getElementById("my-tasks-filter-status");
@@ -145,12 +156,25 @@ window.IQRAA = window.IQRAA || {};
         })[0];
         if (task && task.statusKey) select.value = task.statusKey;
         select.addEventListener("change", function () {
-          /* Local-only, same known simplification as team.html's
-             pause/reactivate toggle (CLAUDE.md §19d) — there's no
-             PATCH /api/tasks/:id endpoint yet, so this updates the
-             fetched-in-memory row for this page view only and does not
-             write back to Airtable. */
-          if (task) task.statusKey = select.value;
+          if (!task) return;
+          var previousValue = task.statusKey;
+          var newKey = select.value;
+          var newLabel = STATUS_KEY_TO_LABEL[newKey];
+          if (!newLabel) return;
+
+          select.disabled = true;
+          api
+            .updateTaskStatus(task.id, newLabel)
+            .then(function () {
+              task.statusKey = newKey;
+              select.disabled = false;
+            })
+            .catch(function (err) {
+              console.error("[my-tasks] Failed to update task status in Airtable:", err);
+              select.value = previousValue || "";
+              select.disabled = false;
+              window.alert(ns.i18n.t("myTasks.statusUpdateError"));
+            });
         });
       });
     }

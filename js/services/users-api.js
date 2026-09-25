@@ -25,7 +25,11 @@
    section). Deliberately uncached, same as js/services/projects-api.js/
    leads-api.js: issues a fresh network request every time it's called,
    so team.html's own loadTeamMembers() re-fetching on every page load
-   actually reflects Airtable edits instead of reusing a stale result. */
+   actually reflects Airtable edits instead of reusing a stale result.
+
+   2026-09-25 "Team pause/reactivate" fix: added updateUserStatus() for
+   the same page's pause/reactivate button (PATCH /api/users/:id/status,
+   also Admin-only) — previously local-only, see js/pages/team.js. */
 window.IQRAA = window.IQRAA || {};
 IQRAA.services = IQRAA.services || {};
 
@@ -77,5 +81,26 @@ IQRAA.services.usersApi = (function () {
     });
   }
 
-  return { createUser: createUser, getTeamMembers: getTeamMembers };
+  function updateUserStatus(userId, status) {
+    return fetch(USERS_API_BASE + "/api/users/" + encodeURIComponent(userId) + "/status", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: status })
+    }).then(function (response) {
+      return response.json().catch(function () {
+        return {};
+      }).then(function (body) {
+        if (!response.ok) {
+          var error = new Error((body && body.error) || "Request failed with status " + response.status);
+          error.status = response.status;
+          error.body = body;
+          throw error;
+        }
+        return body;
+      });
+    });
+  }
+
+  return { createUser: createUser, getTeamMembers: getTeamMembers, updateUserStatus: updateUserStatus };
 })();

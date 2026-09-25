@@ -5,24 +5,30 @@
    facts — client/status/stage/progress/expected completion) now comes
    from js/services/projects-api.js (GET /api/projects on the existing
    backend), fetched fresh on every page load, same as js/pages/
-   projects.js. Tasks, Team, Meetings & Decisions and History below the
-   header are deliberately UNCHANGED and still read js/data/mock-data.js's
-   data.tasks/data.meetings/data.recentActivity, filtered by
-   `t.projectId === project.id` — connecting those tables is explicitly a
-   separate, later task. Since no mock task/meeting references a real
-   Airtable project id, those sections correctly render their existing
-   empty states for every real project (not a bug — there's genuinely no
-   task/meeting data to show yet, and inventing any would violate the "no
-   fake data" rule this was built under).
+   projects.js.
+
+   2026-09-25 "Connect Project Workspace Team & Tasks to real Airtable
+   data": Tasks and Team now come from the same backend too — GET
+   /api/projects/:id/tasks and GET /api/projects/:id/team (see
+   backend/server.js), both reusing the existing Tasks table and its
+   Project/Assignee links, no new table or field. Meetings & Decisions and
+   History are explicitly UNCHANGED and still read js/data/mock-data.js's
+   data.meetings/data.recentActivity, filtered by `m.projectId ===
+   project.id` — out of scope for this task. Since no mock meeting/
+   activity record references a real Airtable project id, those two
+   sections correctly render their existing empty states for every real
+   project.
 
    Known scope limit (see js/pages/projects.js's file-header comment for
    the matching Projects List one): the PM/Team-Member "is this project
    actually assigned to you" restriction check from the mock-data version
-   is skipped entirely for real projects (no teamIds to check against yet
-   for Team Member; PM scoping is already enforced server-side by GET
-   /api/projects itself, see backend/server.js). Re-introduce the
-   Team-Member check once a future task joins team assignment to real user
-   records.
+   is skipped for the header/overview itself (PM scoping is already
+   enforced server-side by GET /api/projects; Team-Member project
+   membership has no server-side check at that layer either) — but the new
+   Tasks/Team endpoints below DO enforce it themselves (403 if this session
+   isn't actually authorized for this project, see backend/server.js's
+   isAuthorizedForProjectTasks()), so at least those two panels can't leak
+   another project's internal data even if the header ever did.
 
    2026-09-24 "Assign PM from Project Workspace": the header's "Project
    Manager" fact now shows the real project.pmName (GET /api/projects
@@ -46,6 +52,37 @@ window.IQRAA = window.IQRAA || {};
     if (!data || !ph || !api || !host) return;
 
     var role = session.user.role;
+
+    /* Tasks.Status/Tasks.Priority come back from the backend as the real
+       Airtable option text ("Not Started", "Medium", …) — same convention
+       js/pages/my-tasks.js already established for the same table. These
+       normalize them to the internal keys ph.renderTaskBoard/
+       taskStatusBadge/priorityBadge expect; an unrecognized priority still
+       displays (as raw text via task.priorityRaw in openTaskModal above)
+       rather than being dropped. */
+    var TASK_STATUS_LABEL_TO_KEY = {
+      "Not Started": "notStarted",
+      "In Progress": "inProgress",
+      Waiting: "waiting",
+      Review: "review",
+      Completed: "completed"
+    };
+    var PRIORITY_KEYS = ["low", "medium", "high"];
+
+    function normalizeProjectTask(t) {
+      var priorityKey = (t.priority || "").trim().toLowerCase();
+      if (PRIORITY_KEYS.indexOf(priorityKey) === -1) priorityKey = null;
+      return {
+        id: t.id,
+        title: t.title,
+        description: t.description,
+        status: TASK_STATUS_LABEL_TO_KEY[t.status] || null,
+        priority: priorityKey,
+        priorityRaw: t.priority,
+        dueDate: t.dueDate,
+        assigneeName: t.assigneeName
+      };
+    }
 
     function setHeaderTitle(text) {
       var titleEl = document.querySelector(".workspace-header__title");
@@ -89,25 +126,22 @@ window.IQRAA = window.IQRAA || {};
       );
     }
 
-    function renderTeam(project) {
-      if (!project.teamIds || project.teamIds.length === 0) {
+    function renderTeam(team) {
+      if (!team || team.length === 0) {
         return '<p class="panel__empty">' + ns.i18n.t("projectWorkspace.noTeamAssigned") + "</p>";
       }
       return (
         '<div class="project-workspace__team-list">' +
-        project.teamIds
-          .map(function (memberId) {
-            var member = data.teamMembers.filter(function (m) {
-              return m.id === memberId;
-            })[0];
-            if (!member) return "";
-            var initial = member.name.charAt(0).toUpperCase();
+        team
+          .map(function (member) {
+            if (!member.fullName) return "";
+            var initial = member.fullName.charAt(0).toUpperCase();
             return (
               '<div class="project-workspace__team-member">' +
               '<span class="avatar" aria-hidden="true">' + initial + "</span>" +
               '<span class="project-workspace__team-member-info">' +
-              '<span class="project-workspace__team-member-name">' + member.name + "</span>" +
-              '<span class="project-workspace__team-member-role">' + ns.i18n.t(member.roleKey) + "</span>" +
+              '<span class="project-workspace__team-member-name">' + member.fullName + "</span>" +
+              '<span class="project-workspace__team-member-role">' + (member.roleKey ? ns.i18n.t(member.roleKey) : "") + "</span>" +
               "</span>" +
               "</div>"
             );
@@ -232,9 +266,9 @@ window.IQRAA = window.IQRAA || {};
     function openTaskModal(task) {
       var body =
         ph.fieldRow("taskFields.description", task.description || "—") +
-        ph.fieldRow("taskFields.assignee", ph.teamMemberName(task.assigneeId)) +
-        ph.fieldRow("projectFields.status", ph.taskStatusBadge(task.status)) +
-        ph.fieldRow("taskFields.priority", ph.priorityBadge(task.priority)) +
+        ph.fieldRow("taskFields.assignee", task.assigneeName || ns.i18n.t("projectFields.unassigned")) +
+        ph.fieldRow("projectFields.status", task.status ? ph.taskStatusBadge(task.status) : "—") +
+        ph.fieldRow("taskFields.priority", task.priority ? ph.priorityBadge(task.priority) : task.priorityRaw || "—") +
         ph.fieldRow("projectFields.deadline", ph.formatDate(task.dueDate)) +
         '<p class="note-text">' + ns.i18n.t("projectWorkspace.taskCommentsComingSoon") + "</p>";
       ns.components.modal.open(task.title, body);
@@ -267,7 +301,10 @@ window.IQRAA = window.IQRAA || {};
       var tasksHtml =
         '<section class="panel">' +
         '<h2 class="panel__title">' + ns.i18n.t("projectWorkspace.tasksHeading") + "</h2>" +
-        '<div class="task-board" id="project-task-board"></div>' +
+        '<div class="task-board" id="project-task-board">' +
+        '<p class="panel__empty"><span class="btn__spinner" aria-hidden="true">' + ns.icons.loader2(16) + "</span> " +
+        ns.i18n.t("projects.loading") +
+        "</p></div>" +
         "</section>";
 
       var meetingsHtml =
@@ -285,7 +322,10 @@ window.IQRAA = window.IQRAA || {};
       var teamHtml =
         '<section class="panel">' +
         '<h2 class="panel__title">' + ns.i18n.t("projectWorkspace.teamHeading") + "</h2>" +
-        renderTeam(project) +
+        '<div id="project-team-list">' +
+        '<p class="panel__empty"><span class="btn__spinner" aria-hidden="true">' + ns.icons.loader2(16) + "</span> " +
+        ns.i18n.t("projects.loading") +
+        "</p></div>" +
         "</section>";
 
       var resourcesHtml =
@@ -308,10 +348,28 @@ window.IQRAA = window.IQRAA || {};
         '<div class="project-workspace__side">' + teamHtml + resourcesHtml + "</div>" +
         "</div>";
 
-      var projectTasks = data.tasks.filter(function (t) {
-        return t.projectId === project.id;
-      });
-      ph.renderTaskBoard("project-task-board", projectTasks, openTaskModal);
+      api
+        .getProjectTasks(project.id)
+        .then(function (tasks) {
+          ph.renderTaskBoard("project-task-board", tasks.map(normalizeProjectTask), openTaskModal);
+        })
+        .catch(function (err) {
+          console.error("[project-workspace] Failed to load this project's tasks from the backend:", err);
+          var taskBoard = document.getElementById("project-task-board");
+          if (taskBoard) taskBoard.innerHTML = '<p class="panel__empty">' + ns.i18n.t("projects.loadError") + "</p>";
+        });
+
+      api
+        .getProjectTeam(project.id)
+        .then(function (team) {
+          var teamList = document.getElementById("project-team-list");
+          if (teamList) teamList.innerHTML = renderTeam(team);
+        })
+        .catch(function (err) {
+          console.error("[project-workspace] Failed to load this project's team from the backend:", err);
+          var teamList = document.getElementById("project-team-list");
+          if (teamList) teamList.innerHTML = '<p class="panel__empty">' + ns.i18n.t("projects.loadError") + "</p>";
+        });
 
       var projectMeetings = data.meetings.filter(function (m) {
         return m.projectId === project.id;

@@ -65,6 +65,35 @@ IQRAA.services.auth = (function () {
     });
   }
 
+  /* 2026-09-25 "Settings profile save" fix: PATCH /api/users/me on the
+     same backend — self-service only, always writes to the session's own
+     user record server-side (see backend/README.md). Body is
+     {fullName,phone}; Email is intentionally not editable here (it's the
+     login lookup key — CLAUDE.md/this task's "do not change
+     authentication" rule), so js/pages/settings.js never sends it. */
+  function updateProfile(payload) {
+    return fetch(AUTH_API_BASE + "/api/users/me", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }).then(function (response) {
+      return response
+        .json()
+        .catch(function () {
+          return {};
+        })
+        .then(function (body) {
+          if (!response.ok) {
+            var error = new Error((body && body.error) || "Request failed with status " + response.status);
+            error.status = response.status;
+            throw error;
+          }
+          return body && body.user;
+        });
+    });
+  }
+
   function getSession() {
     return fetch(AUTH_API_BASE + "/api/auth/me", {
       credentials: "include"
@@ -80,5 +109,5 @@ IQRAA.services.auth = (function () {
       });
   }
 
-  return { login: login, logout: logout, getSession: getSession };
+  return { login: login, logout: logout, getSession: getSession, updateProfile: updateProfile };
 })();
