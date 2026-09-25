@@ -54,6 +54,12 @@ window.IQRAA = window.IQRAA || {};
        2026-09-21g against the real Users table schema: "Active"/"Inactive". */
     var STATUS_VALUES = ["Active", "Inactive"];
 
+    /* 2026-09-25 "Team tabs + KPIs redesign" — tabs group by role, using
+       the same ROLE_KEYS this page's own "New Team Member" form already
+       uses (member.role holds one of these i18n keys directly, per
+       usersApi's mapping, so no separate lookup table is needed). */
+    var activeTab = "all";
+
     var allTeamMembers = [];
 
     function activeProjectCount(memberId) {
@@ -95,9 +101,53 @@ window.IQRAA = window.IQRAA || {};
       ns.components.modal.open(member.fullName || PLACEHOLDER, body);
     }
 
+    function matchesFilters(member) {
+      if (activeTab !== "all" && member.role !== activeTab) return false;
+      return true;
+    }
+
+    /* KPI row + tabs (2026-09-25 "Team tabs + KPIs redesign") — both
+       computed from the full fetched set, not the current tab, same
+       convention as every other KPI row in the app. */
+    function renderKpis() {
+      var active = allTeamMembers.filter(function (m) {
+        return m.status === "active";
+      }).length;
+      var items = [
+        { icon: "users", accent: "purple", value: allTeamMembers.length, label: ns.i18n.t("team.kpiTotalLabel") },
+        { icon: "check", accent: "green", value: active, label: ns.i18n.t("team.kpiActiveLabel") },
+        { icon: "alertTriangle", accent: "rose", value: allTeamMembers.length - active, label: ns.i18n.t("team.kpiInactiveLabel") }
+      ];
+      document.getElementById("team-kpi-grid").innerHTML = items.map(ph.kpiCardHtml).join("");
+    }
+
+    function renderTabs() {
+      var countByRole = {};
+      allTeamMembers.forEach(function (m) {
+        countByRole[m.role] = (countByRole[m.role] || 0) + 1;
+      });
+      var tabs = [{ key: "all", label: ns.i18n.t("team.tabAll"), count: allTeamMembers.length }].concat(
+        ROLE_KEYS.filter(function (roleKey) {
+          return countByRole[roleKey] > 0;
+        }).map(function (roleKey) {
+          return { key: roleKey, label: ns.i18n.t(roleKey), count: countByRole[roleKey] };
+        })
+      );
+      var host = document.getElementById("team-tabs-root");
+      host.innerHTML = ph.tabsHtml(tabs, activeTab, ns.i18n.t("team.roleLabel"));
+      host.querySelectorAll("[data-tab-key]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          activeTab = btn.getAttribute("data-tab-key");
+          renderTabs();
+          renderTable();
+        });
+      });
+    }
+
     function renderTable() {
       var host = document.getElementById("team-list-body");
-      if (allTeamMembers.length === 0) {
+      var visibleMembers = allTeamMembers.filter(matchesFilters);
+      if (visibleMembers.length === 0) {
         host.innerHTML = '<p class="panel__empty">' + ns.i18n.t("team.emptyResults") + "</p>";
         return;
       }
@@ -110,7 +160,7 @@ window.IQRAA = window.IQRAA || {};
         "<th>" + ns.i18n.t("team.activeTasksLabel") + "</th>" +
         "<th></th>" +
         "</tr>";
-      var rows = allTeamMembers
+      var rows = visibleMembers
         .map(function (member) {
           var statusLabel = ns.i18n.t("team.status" + (member.status === "active" ? "Active" : "Inactive"));
           var actionLabel = ns.i18n.t(member.status === "active" ? "team.pauseAction" : "team.reactivateAction");
@@ -151,6 +201,7 @@ window.IQRAA = window.IQRAA || {};
             .updateUserStatus(member.id, airtableStatus)
             .then(function () {
               member.status = newStatus;
+              renderKpis();
               renderTable();
             })
             .catch(function (err) {
@@ -168,6 +219,8 @@ window.IQRAA = window.IQRAA || {};
         .getTeamMembers()
         .then(function (teamMembers) {
           allTeamMembers = teamMembers;
+          renderKpis();
+          renderTabs();
           renderTable();
         })
         .catch(function (err) {
@@ -281,6 +334,8 @@ window.IQRAA = window.IQRAA || {};
               phone: phoneInput.value.trim() || null
             });
             ns.components.modal.close();
+            renderKpis();
+            renderTabs();
             renderTable();
           })
           .catch(function (error) {

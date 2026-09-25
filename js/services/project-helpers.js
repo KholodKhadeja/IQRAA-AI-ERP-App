@@ -535,6 +535,51 @@ IQRAA.services.projectHelpers = (function (ns) {
     host.innerHTML = '<table class="data-table"><thead>' + head + "</thead><tbody>" + rows + "</tbody></table>";
   }
 
+  /* Segmented "tabs" filter control (css/components/tabs.css) — shared
+     markup builder for every list screen that breaks its records into
+     named groups (Leads by status, Projects by pipeline stage, Team by
+     role, Clients by active-project state). Functionally a filter that
+     re-renders the same panel below it, not a set of separate DOM panels
+     — each page keeps its own "which tab is active" state and click
+     wiring (the grouping logic differs per page), this only builds the
+     shared, ARIA-correct markup so every tab row looks/behaves the same. */
+  function tabsHtml(tabs, activeKey, ariaLabelText) {
+    return (
+      '<div class="tabs" role="tablist"' + (ariaLabelText ? ' aria-label="' + ariaLabelText + '"' : "") + ">" +
+      tabs
+        .map(function (tab) {
+          var selected = tab.key === activeKey;
+          return (
+            '<button type="button" class="tabs__tab" role="tab" aria-selected="' + selected + '" data-tab-key="' + tab.key + '">' +
+            "<span>" + tab.label + "</span>" +
+            (typeof tab.count === "number" ? '<span class="tabs__count">' + tab.count + "</span>" : "") +
+            "</button>"
+          );
+        })
+        .join("") +
+      "</div>"
+    );
+  }
+
+  function kpiIconHtml(name, accent) {
+    var accentClass = accent ? " kpi-card__icon--" + accent : "";
+    return '<span class="kpi-card__icon' + accentClass + '" aria-hidden="true">' + ns.icons[name](20) + "</span>";
+  }
+
+  /* item: {icon, accent, value, label} — same visual shape as Admin
+     Overview/Billing's KPI cards (css/components/data-display.css's
+     .kpi-card), factored out here so every new KPI row shares one
+     builder instead of re-deriving the same markup string per page. */
+  function kpiCardHtml(item) {
+    return (
+      '<div class="kpi-card kpi-card--' + item.accent + '">' +
+      kpiIconHtml(item.icon, item.accent) +
+      '<span class="kpi-card__value">' + item.value + "</span>" +
+      '<span class="kpi-card__label">' + item.label + "</span>" +
+      "</div>"
+    );
+  }
+
   return {
     STATUS_TONE: STATUS_TONE,
     PAYMENT_TONE: PAYMENT_TONE,
@@ -577,6 +622,9 @@ IQRAA.services.projectHelpers = (function (ns) {
     airtableStageKey: airtableStageKey,
     airtableStageLabel: airtableStageLabel,
     airtableStatusBadge: airtableStatusBadge,
-    renderRealProjectsTable: renderRealProjectsTable
+    renderRealProjectsTable: renderRealProjectsTable,
+    tabsHtml: tabsHtml,
+    kpiIconHtml: kpiIconHtml,
+    kpiCardHtml: kpiCardHtml
   };
 })(window.IQRAA);

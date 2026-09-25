@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="../css/shared.css" />
     <link rel="stylesheet" href="../css/pages/workspace.css" />
     <link rel="stylesheet" href="../css/pages/list-page.css" />
+    <link rel="stylesheet" href="../css/components/tabs.css" />
   </head>
   <body>
     <div class="workspace-shell">
@@ -17,6 +18,10 @@
         <div id="workspace-header-root"></div>
         <main id="main-content" class="workspace-main workspace-main--list-page">
           <div class="list-page">
+            <div class="kpi-grid" id="leads-kpi-grid"></div>
+
+            <div id="leads-tabs-root"></div>
+
             <div class="list-page__toolbar">
               <div class="list-page__search">
                 <label class="sr-only" for="leads-search" data-i18n="leads.searchPlaceholder"></label>
@@ -26,10 +31,6 @@
                   class="text-field__input"
                   data-i18n-attr="placeholder:leads.searchPlaceholder"
                 />
-              </div>
-              <div class="list-page__filters">
-                <label class="sr-only" for="leads-filter-status" data-i18n="leads.filterStatusLabel"></label>
-                <select id="leads-filter-status" class="select"></select>
               </div>
               <button type="button" class="btn btn--primary" id="leads-create-btn">
                 <span data-i18n="leads.createButton"></span>

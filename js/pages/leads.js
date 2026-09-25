@@ -77,8 +77,16 @@ window.IQRAA = window.IQRAA || {};
     };
 
     var searchInput = document.getElementById("leads-search");
-    var statusSelect = document.getElementById("leads-filter-status");
     var createBtn = document.getElementById("leads-create-btn");
+
+    /* Tab order/labels (2026-09-25 "Leads tabs + KPIs redesign") — the raw
+       Airtable status values, in their real pipeline order, plus "all".
+       Labels for the 4 real statuses stay in English on purpose (the tab
+       just wraps the same free-text lead.status this table already
+       renders via ph.badge() — CLAUDE.md §12 leaves that value untouched,
+       so the tab pill matches it exactly rather than inventing a Hebrew
+       label for a status this app doesn't own the vocabulary of). */
+    var activeTab = "all";
 
     var allLeads = [];
 
@@ -99,23 +107,8 @@ window.IQRAA = window.IQRAA || {};
       if (retryBtn) retryBtn.addEventListener("click", loadLeads);
     }
 
-    function populateFilters() {
-      var previous = statusSelect.value;
-      var statusValues = [];
-      allLeads.forEach(function (lead) {
-        if (lead.status && statusValues.indexOf(lead.status) === -1) statusValues.push(lead.status);
-      });
-      var statusOptions = statusValues
-        .map(function (statusLabelText) {
-          return '<option value="' + statusLabelText + '">' + statusLabelText + "</option>";
-        })
-        .join("");
-      statusSelect.innerHTML = '<option value="">' + ns.i18n.t("leads.allStatuses") + "</option>" + statusOptions;
-      statusSelect.value = previous;
-    }
-
     /* Defensive client-side check (see file-header comment) on top of
-       the search/status-dropdown filters a viewer can apply. */
+       the search/tab filters a viewer can apply. */
     function matchesFilters(lead) {
       if (LEADS_LIST_STATUSES.indexOf(lead.status) === -1) return false;
       var query = searchInput.value.trim().toLowerCase();
@@ -124,8 +117,56 @@ window.IQRAA = window.IQRAA || {};
         var org = (lead.org || "").toLowerCase();
         if (name.indexOf(query) === -1 && org.indexOf(query) === -1) return false;
       }
-      if (statusSelect.value !== "" && lead.status !== statusSelect.value) return false;
+      if (activeTab !== "all" && lead.status !== activeTab) return false;
       return true;
+    }
+
+    /* KPI row + tabs (2026-09-25 "Leads tabs + KPIs redesign") — both
+       computed from the full LEADS_LIST_STATUSES-filtered set (not the
+       current search query), same convention as every other KPI row in
+       the app (Admin Overview/Billing don't shrink their KPI numbers
+       while you type in a search box either). */
+    function countsSource() {
+      return allLeads.filter(function (lead) {
+        return LEADS_LIST_STATUSES.indexOf(lead.status) !== -1;
+      });
+    }
+
+    function renderKpis() {
+      var leads = countsSource();
+      var countByStatus = {};
+      leads.forEach(function (lead) {
+        countByStatus[lead.status] = (countByStatus[lead.status] || 0) + 1;
+      });
+      var items = [
+        { icon: "trendingUp", accent: "purple", value: leads.length, label: ns.i18n.t("leads.kpiTotalLabel") },
+        { icon: "clock", accent: "amber", value: countByStatus["Waiting for first payment"] || 0, label: ns.i18n.t("leads.kpiWaitingPaymentLabel") },
+        { icon: "creditCard", accent: "teal", value: countByStatus["First payment paid"] || 0, label: ns.i18n.t("leads.kpiFirstPaymentPaidLabel") },
+        { icon: "check", accent: "green", value: countByStatus["Proccessed"] || 0, label: ns.i18n.t("leads.kpiProcessedLabel") }
+      ];
+      document.getElementById("leads-kpi-grid").innerHTML = items.map(ph.kpiCardHtml).join("");
+    }
+
+    function renderTabs() {
+      var leads = countsSource();
+      var countByStatus = {};
+      leads.forEach(function (lead) {
+        countByStatus[lead.status] = (countByStatus[lead.status] || 0) + 1;
+      });
+      var tabs = [{ key: "all", label: ns.i18n.t("leads.tabAll"), count: leads.length }].concat(
+        LEADS_LIST_STATUSES.map(function (status) {
+          return { key: status, label: status, count: countByStatus[status] || 0 };
+        })
+      );
+      var host = document.getElementById("leads-tabs-root");
+      host.innerHTML = ph.tabsHtml(tabs, activeTab, ns.i18n.t("sidebar.leads"));
+      host.querySelectorAll("[data-tab-key]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          activeTab = btn.getAttribute("data-tab-key");
+          renderTabs();
+          renderTable();
+        });
+      });
     }
 
     /* Action-column content for a lead's row, driven entirely by its
@@ -252,6 +293,8 @@ window.IQRAA = window.IQRAA || {};
         .then(function () {
           lead.status = nextStatus;
           if (ns.components.modal.isOpen()) ns.components.modal.close();
+          renderKpis();
+          renderTabs();
           renderTable();
         })
         .catch(function (err) {
@@ -348,7 +391,8 @@ window.IQRAA = window.IQRAA || {};
         .getLeads()
         .then(function (leads) {
           allLeads = leads;
-          populateFilters();
+          renderKpis();
+          renderTabs();
           renderTable();
         })
         .catch(function (err) {
@@ -358,7 +402,6 @@ window.IQRAA = window.IQRAA || {};
     }
 
     searchInput.addEventListener("input", renderTable);
-    statusSelect.addEventListener("change", renderTable);
     createBtn.addEventListener("click", function () {
       ns.components.modal.open(ns.i18n.t("leads.createTitle"), '<p class="note-text">' + ns.i18n.t("leads.writeNotConnected") + "</p>");
     });

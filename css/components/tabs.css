@@ -1,0 +1,65 @@
+/* Segmented "tabs" filter control — shared by every list screen that
+   breaks its records into named groups (Leads by status, Projects by
+   pipeline stage, Team by role, Clients by active-project state).
+   Functionally a filter that re-renders the same panel below it (not a
+   set of separate DOM panels), styled/marked up as a real ARIA tablist
+   (role="tablist"/"tab", aria-selected) per CLAUDE.md §15 — each page
+   wires its own click handler in its own script, this file only defines
+   the shared look. */
+.tabs {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  padding-bottom: var(--space-1);
+}
+
+.tabs__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.tabs__tab:hover {
+  border-color: var(--primary);
+  color: var(--text);
+}
+
+.tabs__tab[aria-selected="true"] {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-contrast);
+}
+
+.tabs__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-full);
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  font-size: var(--font-size-xs);
+  font-weight: 800;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.tabs__tab[aria-selected="true"] .tabs__count {
+  background: rgba(255, 255, 255, 0.28);
+  color: var(--primary-contrast);
+}
