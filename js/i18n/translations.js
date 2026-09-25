@@ -353,6 +353,9 @@ IQRAA.i18n.translations = {
       historyHeading: "היסטוריית פעילות הפרויקט",
       restrictedHeading: "אין גישה לפרויקט זה",
       restrictedText: "הפרויקט הזה אינו משויך אליך.",
+      assignPmSubmitting: "משייך…",
+      assignPmError: "אירעה שגיאה בשיוך מנהל הפרויקט. נסו שוב.",
+      assignPmNoOptions: "לא נמצאו מנהלי פרויקטים פעילים לשיוך.",
     },
     resourceType: {
       script: "מסמך תסריט",
@@ -432,8 +435,31 @@ IQRAA.i18n.translations = {
       loading: "טוענים לידים…",
       loadError: "לא הצלחנו לטעון את הלידים מ-Airtable כרגע.",
       retry: "ניסיון חוזר",
-      writeNotConnected: "יצירה ועריכה של לידים בעמוד זה עדיין לא מחוברות ל-Airtable.",
+      writeNotConnected: "יצירה ועריכה של פרטי הליד בעמוד זה עדיין לא מחוברות ל-Airtable.",
       messageLabel: "תוכן הפנייה",
+      markWaitingPaymentAction: "עדכון ל'מחכה לתשלום ראשון'",
+      statusUpdateSubmitting: "מעדכן…",
+      statusUpdateError: "לא הצלחנו לעדכן את סטטוס הליד. נסו שוב.",
+      goToBillingAction: "מעבר לחשבוניות ליצירת חשבונית",
+      waitingForAutomationNote: "ממתין לעיבוד אוטומטי",
+      completedNote: "התהליך הושלם",
+      invoiceRefLabel: "חשבונית מקושרת",
+      invoiceClientLabel: "לקוח",
+      invoiceTotalLabel: "סכום",
+      invoiceDocumentLabel: "מסמך",
+      invoiceNoDocument: "אין מסמך מצורף",
+      invoiceViewDocument: "צפייה במסמך",
+      guidanceMeetingBookingTitle: "שלב פגישה",
+      guidanceMeetingBookingBody:
+        "יש לתאם ולקיים את הפגישה עם הלקוח מחוץ למערכת. לאחר שהפגישה הסתיימה והלקוח אישר שהוא מעוניין להתחיל את הפרויקט, יש לעדכן את הסטטוס ל'מחכה לתשלום ראשון'.",
+      guidanceWaitingPaymentTitle: "מחכה לתשלום ראשון",
+      guidanceWaitingPaymentBody:
+        "הלקוח אישר את תחילת הפרויקט. השלב הבא הוא ליצור חשבונית ראשונה עבור הלקוח — יש לעבור לחשבוניות וליצור את החשבונית הראשונה עבור הלקוח.",
+      guidanceFirstPaymentPaidTitle: "תשלום ראשון התקבל",
+      guidanceFirstPaymentPaidBody:
+        "התשלום הראשון התקבל בהצלחה. אין צורך ליצור את הלקוח או הפרויקט באופן ידני — המערכת תטפל ביצירת הלקוח והפרויקט באמצעות תהליך אוטומטי מתוזמן, ולא באופן מיידי.",
+      guidanceProcessedTitle: "התהליך הושלם",
+      guidanceProcessedBody: "הלקוח והפרויקט נוצרו בהצלחה והליד עובד.",
     },
     clientFields: {
       contact: "איש קשר",
@@ -486,6 +512,9 @@ IQRAA.i18n.translations = {
       retry: "ניסיון חוזר",
     },
     billing: {
+      invoicesSnapshotHeading: "תמונת מצב — חשבוניות",
+      paymentsSnapshotHeading: "תמונת מצב — גבייה ותשלומים",
+      resultsCount: "תוצאות",
       kpiTotalInvoices: "סה\"כ חשבוניות",
       kpiTotalInvoicedAmount: "סכום חיוב כולל",
       kpiOpenInvoices: "חשבוניות פתוחות",
@@ -546,16 +575,19 @@ IQRAA.i18n.translations = {
       noRelatedInvoice: "ללא חשבונית מקושרת",
       paymentRecordsHeading: "תשלומים על חשבונית זו",
       noPaymentsOnInvoice: "לא נרשמו תשלומים על חשבונית זו עדיין.",
-      updatePaymentAction: "עדכון תשלום",
-      updatePaymentTitle: "עדכון תשלום — חשבונית",
+      updatePaymentAction: "ביצוע תשלום",
+      updatePaymentTitle: "ביצוע תשלום — חשבונית",
       amountPaidLabel: "סכום ששולם",
       paymentMethodLabel: "אמצעי תשלום",
-      updatePaymentSuccess: "התשלום עודכן בהצלחה. מרעננים את הנתונים…",
-      updatePaymentNote: "הפעולה מסמנת כ\"שולם\" את התשלום הבא שטרם שולם בחשבונית זו.",
+      updatePaymentSuccess: "התשלום בוצע בהצלחה. מרעננים את הנתונים…",
+      updatePaymentNote: "הפעולה שולחת בקשה ל-webhook הקיים, מסמנת את החשבונית כשולמה, ומעדכנת בהתאם את הליד המקושר אליה.",
+      updatePaymentAlreadyPaid: "החשבונית הזו כבר מסומנת כשולמה — לא ניתן לבצע עליה תשלום נוסף.",
+      updatePaymentNotConfirmed: "לא התקבל אישור מפורש מה-webhook שהתשלום בוצע. ודאו שהחשבונית מקושרת לליד תקין ונסו שוב.",
     },
     billingFields: {
       invoiceNumber: "מספר חשבונית",
       client: "לקוח",
+      lead: "ליד",
       amountBeforeVat: "סכום לפני מע\"מ",
       vat: "מע\"מ",
       total: "סה\"כ לתשלום",
@@ -587,8 +619,15 @@ IQRAA.i18n.translations = {
        overdue) — English values deliberately, per the project owner's
        explicit 2026-09-22 decision extending CLAUDE.md §12's status/
        leadStatus/invoiceStatus/team.status exception to this 5th
-       category. Computed server-side (backend/server.js), never guessed
-       client-side. */
+       category. Still computed server-side (backend/server.js) for the
+       Billing KPI cards, but no longer rendered as a per-invoice badge —
+       removed from the Invoices table/filter/detail modal 2026-09-25 at
+       the project owner's explicit request, since it could disagree with
+       an invoice's own real Status (e.g. read "Unpaid" on an invoice the
+       payment-via-app-update webhook had just set to "PAID") once
+       Payments stopped being created for every paid invoice. Kept as a
+       legacy lookup for any future reintroduction, same as invoiceStatus
+       above — billing.js's per-invoice display no longer calls it. */
     paymentStatus: {
       unpaid: "Unpaid",
       partial: "Partially Paid",

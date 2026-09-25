@@ -55,22 +55,15 @@ See `CLAUDE.md` §16 for the full verification checklist (lint + pa11y + a
 
 ## Deploying to Render (Static Site)
 
-This folder is **not** the git repository root — the repo root is one level
-up (`AI_Learning_Operations_ERP/`), which also holds the spec docs, the
-Airtable/n8n folders, and this `WebApp - Learning_Operation_ERP/` folder
-itself. A Render Static Site needs to be told that this subfolder, not the
-repo root, is what to publish — otherwise it can't find `index.html` and
-every relative `css/`/`js/`/`src/` request 404s.
+**2026-09-24: this folder is now its own git repo** (`https://github.com/KholodKhadeja/IQRAA-AI-ERP-App`), split out of the old `AI_Learning_Operations_ERP/` monorepo so that repo holds only this application. This folder's git repo root and the site root are now the same directory — no `rootDir` is needed for the static site anymore.
 
-A `render.yaml` Blueprint at the repo root already encodes this. If the
-Render service was created via **New + → Blueprint** pointing at this repo,
-it picks the settings up automatically. If it was instead created as a
-plain manual **Static Site**, set the same two values by hand under that
-service's **Settings**:
+A `render.yaml` Blueprint at this repo's root already encodes this. If the Render service was created via **New + → Blueprint** pointing at this repo, it picks the settings up automatically. If it was instead created as a plain manual **Static Site**, set these values by hand under that service's **Settings**:
 
-- **Root Directory**: `WebApp - Learning_Operation_ERP`
+- **Root Directory**: (leave empty)
 - **Publish Directory**: `.`
 - **Build Command**: (leave empty — there's no build step, see §Tech stack)
+
+**If this service was set up before the 2026-09-24 repo split**, it may still have `Root Directory: WebApp - Learning_Operation_ERP` saved from before — that path no longer exists in this repo (the repo root already is that folder's old contents), so clear it. A dashboard-set Root Directory isn't overridden by `render.yaml` except on a fresh Blueprint sync.
 
 If the deployed site loads but shows console errors and 404s for `css/`,
 `js/`, or `src/` assets, this Root Directory setting is the first thing to

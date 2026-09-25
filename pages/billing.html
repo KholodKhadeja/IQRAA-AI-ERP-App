@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="../css/shared.css" />
     <link rel="stylesheet" href="../css/pages/workspace.css" />
     <link rel="stylesheet" href="../css/pages/list-page.css" />
+    <link rel="stylesheet" href="../css/pages/billing.css" />
   </head>
   <body>
     <div class="workspace-shell">
@@ -17,14 +18,25 @@
         <div id="workspace-header-root"></div>
         <main id="main-content" class="workspace-main workspace-main--list-page">
           <div class="list-page">
-            <div class="kpi-grid" id="billing-invoices-kpi-grid"></div>
-            <div class="kpi-grid" id="billing-payments-kpi-grid"></div>
+            <div class="billing-kpi-section billing-kpi-section--invoices">
+              <p class="billing-kpi-section__title" data-i18n="billing.invoicesSnapshotHeading"></p>
+              <div class="kpi-grid" id="billing-invoices-kpi-grid"></div>
+            </div>
 
-            <section class="panel" aria-labelledby="billing-invoices-heading">
+            <div class="billing-kpi-section billing-kpi-section--payments">
+              <p class="billing-kpi-section__title" data-i18n="billing.paymentsSnapshotHeading"></p>
+              <div class="kpi-grid" id="billing-payments-kpi-grid"></div>
+            </div>
+
+            <section class="panel billing-panel billing-panel--invoices" aria-labelledby="billing-invoices-heading">
               <div class="panel__header">
-                <h2 class="panel__title" id="billing-invoices-heading" data-i18n="billing.sectionInvoices"></h2>
+                <div class="billing-panel-heading">
+                  <span class="billing-panel-heading__icon" id="invoices-panel-icon" aria-hidden="true"></span>
+                  <h2 class="panel__title" id="billing-invoices-heading" data-i18n="billing.sectionInvoices"></h2>
+                  <span class="billing-panel-heading__count" id="invoices-count-badge"></span>
+                </div>
               </div>
-              <div class="list-page__toolbar">
+              <div class="list-page__toolbar billing-toolbar">
                 <div class="list-page__search">
                   <label class="sr-only" for="invoices-search" data-i18n="billing.invoiceSearchPlaceholder"></label>
                   <input type="search" id="invoices-search" class="text-field__input" data-i18n-attr="placeholder:billing.invoiceSearchPlaceholder" />
@@ -32,8 +44,6 @@
                 <div class="list-page__filters">
                   <label class="sr-only" for="invoices-filter-status" data-i18n="billing.filterInvoiceStatusLabel"></label>
                   <select id="invoices-filter-status" class="select"></select>
-                  <label class="sr-only" for="invoices-filter-payment-status" data-i18n="billing.filterPaymentStatusLabel"></label>
-                  <select id="invoices-filter-payment-status" class="select"></select>
                   <label class="sr-only" for="invoices-sort" data-i18n="billing.sortLabel"></label>
                   <select id="invoices-sort" class="select"></select>
                 </div>
@@ -44,11 +54,15 @@
               <div id="invoices-list-body"></div>
             </section>
 
-            <section class="panel" aria-labelledby="billing-payments-heading">
+            <section class="panel billing-panel billing-panel--payments" aria-labelledby="billing-payments-heading">
               <div class="panel__header">
-                <h2 class="panel__title" id="billing-payments-heading" data-i18n="billing.sectionPayments"></h2>
+                <div class="billing-panel-heading">
+                  <span class="billing-panel-heading__icon" id="payments-panel-icon" aria-hidden="true"></span>
+                  <h2 class="panel__title" id="billing-payments-heading" data-i18n="billing.sectionPayments"></h2>
+                  <span class="billing-panel-heading__count" id="payments-count-badge"></span>
+                </div>
               </div>
-              <div class="list-page__toolbar">
+              <div class="list-page__toolbar billing-toolbar">
                 <div class="list-page__search">
                   <label class="sr-only" for="payments-search" data-i18n="billing.paymentSearchPlaceholder"></label>
                   <input type="search" id="payments-search" class="text-field__input" data-i18n-attr="placeholder:billing.paymentSearchPlaceholder" />

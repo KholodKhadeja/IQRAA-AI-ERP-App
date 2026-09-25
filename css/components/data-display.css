@@ -360,6 +360,35 @@ a.kpi-card:hover {
 
 .field-row__value {
   font-size: var(--font-size-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* Small icon-only affordance appended to a .field-row__value to edit that
+   fact in place (e.g. Project Workspace's "assign/reassign PM" — an
+   Admin-only action, not shown at all to other roles). Kept generic here
+   rather than page-scoped since any future editable fact-row can reuse it. */
+.field-row__edit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--primary-dark);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.field-row__edit-btn:hover {
+  background: var(--primary-pale);
+  border-color: var(--primary);
 }
 
 /* Small muted note/help-text paragraph — used across Project Workspace,

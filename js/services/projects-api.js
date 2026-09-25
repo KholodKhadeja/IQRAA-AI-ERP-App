@@ -47,5 +47,55 @@ IQRAA.services.projectsApi = (function () {
     });
   }
 
-  return { getProjects: getProjects };
+  /* 2026-09-24 "Assign PM from Project Workspace" — GET /api/users/pms
+     (Admin-only, backend/server.js), the list a PM-assignment dropdown is
+     built from. Same uncached-on-every-call convention as getProjects(). */
+  function getProjectManagers() {
+    return fetch(PROJECTS_API_BASE + "/api/users/pms", {
+      credentials: "include"
+    }).then(function (response) {
+      return response
+        .json()
+        .catch(function () {
+          return {};
+        })
+        .then(function (body) {
+          if (!response.ok) {
+            var error = new Error((body && body.error) || "Request failed with status " + response.status);
+            error.status = response.status;
+            error.body = body;
+            throw error;
+          }
+          return (body && body.projectManagers) || [];
+        });
+    });
+  }
+
+  /* PATCH /api/projects/:id/assign-pm — the write half of the same task.
+     Resolves to the updated project (id/pmIds/pmName among other fields). */
+  function assignPm(projectId, pmId) {
+    return fetch(PROJECTS_API_BASE + "/api/projects/" + encodeURIComponent(projectId) + "/assign-pm", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pmId: pmId })
+    }).then(function (response) {
+      return response
+        .json()
+        .catch(function () {
+          return {};
+        })
+        .then(function (body) {
+          if (!response.ok) {
+            var error = new Error((body && body.error) || "Request failed with status " + response.status);
+            error.status = response.status;
+            error.body = body;
+            throw error;
+          }
+          return body && body.project;
+        });
+    });
+  }
+
+  return { getProjects: getProjects, getProjectManagers: getProjectManagers, assignPm: assignPm };
 })();

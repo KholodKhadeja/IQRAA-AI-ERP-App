@@ -29,18 +29,29 @@
   color: var(--primary-dark);
 }
 
+/* Bug fix (2026-09-24): this used to be `display:flex; flex-wrap:wrap;
+   align-items:center` without also setting `flex-direction`, so it never
+   actually overrode .panel's own `flex-direction:column` (same class list,
+   same specificity — .panel's declaration for a property this rule never
+   touches just keeps applying). The real effect was every field-row
+   stacking into one long vertical column with align-items:center
+   centering each of them horizontally, instead of the intended wrapping
+   row of compact facts — this is what made the panel look broken/empty
+   with huge gaps between fields. A grid (not a flex row) is used instead
+   so every fact gets an equal, predictable column rather than
+   flex-basis-from-content sizing. */
 .project-workspace__header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3) var(--space-5);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-5) var(--space-6);
 }
 
 /* Individual header facts use the shared .field-row (css/components/
    data-display.css) instead of a page-scoped duplicate. */
 
 .project-workspace__header-progress {
-  min-width: 140px;
+  min-width: 120px;
+  max-width: 220px;
 }
 
 .project-workspace__grid {

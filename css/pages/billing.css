@@ -1,0 +1,245 @@
+/* Billing — Invoices & Payments (redesign, 2026-09-24). Page-scoped
+   styling only — the shared list-page.css/data-display.css primitives
+   this page is built on (panel, kpi-card, data-table, badge) are left
+   untouched so Projects/Leads/Clients/My Tasks are unaffected; every
+   selector here is either a billing-* block or scoped under a
+   billing-* ancestor class added in pages/billing.html, per
+   CLAUDE.md §18's page-scoped-block convention. Goal: a more vibrant,
+   color-coded financial-dashboard read for the Admin (tone-coded KPIs,
+   accented panels, status-tinted table rows) while staying inside the
+   token system (§13) and the internal-workspace visual language (§8) —
+   no photo panes, no marketing-scale type. */
+
+.billing-kpi-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.billing-kpi-section__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.billing-kpi-section__title::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--primary);
+  flex-shrink: 0;
+}
+
+.billing-kpi-section--payments .billing-kpi-section__title::before {
+  background: var(--success);
+}
+
+/* KPI card tone variants — an accent edge, a soft-tinted background wash
+   and a matching icon color per card, so risk/attention figures (open
+   invoices, overdue payments) are visually distinct from healthy ones
+   (paid) at a glance, not just distinguishable by reading the label. */
+.billing-kpi-card {
+  border-inline-start-width: 4px;
+  border-inline-start-style: solid;
+  border-inline-start-color: var(--border);
+  transition:
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.billing-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.billing-kpi-card--primary {
+  border-inline-start-color: var(--primary);
+  background: linear-gradient(160deg, var(--primary-soft) 0%, var(--surface) 65%);
+}
+
+.billing-kpi-card--primary .kpi-card__icon {
+  background: var(--primary-pale);
+  color: var(--primary-dark);
+}
+
+.billing-kpi-card--success {
+  border-inline-start-color: var(--success);
+  background: linear-gradient(160deg, var(--success-soft) 0%, var(--surface) 65%);
+}
+
+.billing-kpi-card--success .kpi-card__icon {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.billing-kpi-card--warning {
+  border-inline-start-color: var(--warning);
+  background: linear-gradient(160deg, var(--warning-soft) 0%, var(--surface) 65%);
+}
+
+.billing-kpi-card--warning .kpi-card__icon {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.billing-kpi-card--warning .kpi-card__value {
+  color: var(--warning);
+}
+
+.billing-kpi-card--danger {
+  border-inline-start-color: var(--danger);
+  background: linear-gradient(160deg, var(--danger-soft) 0%, var(--surface) 65%);
+}
+
+.billing-kpi-card--danger .kpi-card__icon {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.billing-kpi-card--danger .kpi-card__value {
+  color: var(--danger);
+}
+
+/* Panel accents — a colored top edge + a matching round icon beside the
+   panel title, so the two panels (Invoices / Payments) read as distinct
+   colored sections instead of two identical white cards. */
+.billing-panel {
+  border-top-width: 4px;
+  border-top-style: solid;
+}
+
+.billing-panel--invoices {
+  border-top-color: var(--primary);
+}
+
+.billing-panel--payments {
+  border-top-color: var(--success);
+}
+
+.billing-panel-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.billing-panel-heading__icon {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.billing-panel--invoices .billing-panel-heading__icon {
+  background: var(--primary-pale);
+  color: var(--primary-dark);
+}
+
+.billing-panel--payments .billing-panel-heading__icon {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.billing-panel-heading__count {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: var(--neutral-soft);
+  padding: 0.2rem 0.7rem;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+
+/* Toolbar strip — a tinted bar around search/filters so it reads as a
+   distinct control surface, not more panel-white space. */
+.billing-toolbar {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+}
+
+/* Data table polish: zebra striping, a hover highlight, tabular-numeral
+   amount columns, and per-row status tinting so an overdue/partial row
+   is visible without reading every badge individually. */
+.billing-table tbody tr td {
+  transition: background-color var(--transition-fast);
+}
+
+.billing-table tbody tr:nth-child(even):not(.billing-row--danger):not(.billing-row--warning) td {
+  background: var(--background);
+}
+
+.billing-table tbody tr:hover td {
+  background: var(--primary-soft);
+}
+
+.billing-table tbody tr.billing-row--warning td {
+  background: var(--warning-soft);
+}
+
+.billing-table tbody tr.billing-row--danger td {
+  background: var(--danger-soft);
+}
+
+.billing-amount-cell {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Loading / error / empty states — an icon-forward variant of the shared
+   .panel__empty text-only state, used only on this page. */
+.billing-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.billing-state__icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-full);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.billing-state--loading .billing-state__icon {
+  background: var(--primary-pale);
+  color: var(--primary-dark);
+}
+
+.billing-state--error .billing-state__icon {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.billing-state--empty .billing-state__icon {
+  background: var(--primary-pale);
+  color: var(--primary-dark);
+}
+
+.billing-panel--payments .billing-state--empty .billing-state__icon {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.billing-state__text {
+  margin: 0;
+  font-size: var(--font-size-sm);
+}

@@ -622,7 +622,7 @@ app.get("/api/users/team", requireAuth, requireRole("admin"), requireAirtableCon
    Field mapping (Airtable field -> response field), confirmed against
    the real schema via get_table_schema, not guessed:
      Project Name        -> name
-     Client (plain text)  -> client
+     Client Name (from Clients) (lookup) -> client
      Status (singleSelect)-> status        (raw option label, e.g. "In Progress")
      Current Stage (sel.) -> stage         (raw option label, e.g. "Production")
      Progress (percent)   -> progress      (0-1 fraction from Airtable -> 0-100 int)
@@ -702,7 +702,15 @@ function mapProjectRecord(record) {
     id: record.id,
     projectCode: fields["Project ID"] || null,
     name: fields["Project Name"] || null,
-    client: fields.Client || null,
+    /* 2026-09-25 Airtable schema cleanup: the old free-text "Client"
+       field (and two dead duplicate link fields, "Clients 2" /
+       "Client ID (from Clients 2)") were deleted — "Clients" (linked
+       record -> Clients table) is now the one client relationship on
+       this table, and "Client Name (from Clients)" is a lookup through
+       it, added specifically so this response doesn't need a second
+       Clients fetch/join just to show a name. Lookup values come back
+       as an array even for a single-linked-client project. */
+    client: (fields["Client Name (from Clients)"] && fields["Client Name (from Clients)"][0]) || null,
     status: airtableSelectName(fields.Status),
     stage: airtableSelectName(fields["Current Stage"]),
     progress: Math.round(progressFraction * 100),
@@ -796,6 +804,96 @@ app.get("/api/projects", requireAuth, requireProjectsConfigured, async function 
   }
 });
 
+/* GET /api/users/pms (2026-09-24 "Assign PM from Project Workspace") —
+   Admin-only list of active Project Manager users, used to populate the
+   PM-assignment dropdown on pages/project-workspace.html. Reuses the same
+   Users-table Role join every other PM lookup in this file already relies
+   on (mapProjectRecord's pmIds / GET /api/dashboard/admin's pmWorkload) —
+   no new table, nothing invented. Only Status==="Active" PMs are offered:
+   assigning a project to a deactivated account isn't a real choice. */
+app.get("/api/users/pms", requireAuth, requireRole("admin"), requireAirtableConfigured, async function (req, res) {
+  try {
+    const records = await fetchAllUserRecords();
+    const projectManagers = records
+      .filter(function (r) {
+        const fields = r.fields || {};
+        return mapAirtableRoleToAppRole(fields.Role) === "pm" && (fields.Status || "").trim().toLowerCase() === "active";
+      })
+      .map(function (r) {
+        return { id: r.id, fullName: (r.fields && r.fields["Full Name"]) || null };
+      });
+    return res.json({ projectManagers: projectManagers });
+  } catch (err) {
+    console.error("[backend] Failed to fetch Project Managers from Airtable:", err);
+    return res.status(502).json({
+      error: "Could not retrieve project managers from Airtable.",
+      airtableStatus: err.airtableStatus,
+      airtableError: err.airtableError,
+      details: err.airtableStatus ? undefined : err.message
+    });
+  }
+});
+
+/* PATCH /api/projects/:id/assign-pm (2026-09-24, same task) — the write
+   half of PM assignment (CLAUDE.md §0/§19: sensitive/write operations go
+   through n8n or this backend, never the frontend talking to Airtable
+   directly). Admin-only. Sets the Projects record's "Project Manager"
+   linked-record field (-> Users table) to a single id.
+
+   pmId is re-validated against a real, currently-Active PM user record on
+   this server rather than trusted from the request body alone — otherwise
+   an Admin session could link a project to a Client/Team-Member/
+   nonexistent/deactivated id just by editing the request. */
+app.patch("/api/projects/:id/assign-pm", requireAuth, requireRole("admin"), requireProjectsConfigured, async function (req, res) {
+  const pmId = req.body && req.body.pmId;
+  if (!pmId || typeof pmId !== "string") {
+    return res.status(400).json({ error: "pmId is required." });
+  }
+
+  try {
+    const userRecords = await fetchAllUserRecords();
+    const pmRecord = userRecords.filter(function (r) {
+      return r.id === pmId;
+    })[0];
+    const pmFields = pmRecord && pmRecord.fields;
+    const isActivePm =
+      pmRecord &&
+      mapAirtableRoleToAppRole(pmFields.Role) === "pm" &&
+      (pmFields.Status || "").trim().toLowerCase() === "active";
+    if (!isActivePm) {
+      return res.status(400).json({ error: "pmId does not refer to an active Project Manager user." });
+    }
+
+    const url = "https://api.airtable.com/v0/" + AIRTABLE_BASE_ID + "/" + AIRTABLE_PROJECTS_TABLE_ID + "/" + encodeURIComponent(req.params.id);
+    const response = await fetch(url, {
+      method: "PATCH",
+      headers: {
+        Authorization: "Bearer " + AIRTABLE_PAT,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ fields: { "Project Manager": [pmId] } })
+    });
+    const body = await response.json().catch(function () {
+      return {};
+    });
+    if (!response.ok) {
+      console.error("[backend] Airtable rejected the Project Manager assignment:", response.status, JSON.stringify(body));
+      return res.status(502).json({
+        error: "Airtable rejected the request.",
+        airtableStatus: response.status,
+        airtableError: body && body.error
+      });
+    }
+
+    const project = mapProjectRecord(body);
+    project.pmName = pmFields["Full Name"] || null;
+    return res.json({ project: project });
+  } catch (networkError) {
+    console.error("[backend] Could not reach Airtable to assign a Project Manager:", networkError);
+    return res.status(502).json({ error: "Could not reach Airtable.", details: networkError.message });
+  }
+});
+
 /* ===== Leads (2026-09-22 "Connect Leads to Airtable", role-gated
    2026-09-23 "Phase 1 security fix") =====
 
@@ -829,6 +927,12 @@ app.get("/api/projects", requireAuth, requireProjectsConfigured, async function 
    request level" instruction), and js/pages/leads.js re-checks it
    client-side as a defensive second layer.
 
+   Extended 2026-09-25 from a single-status filter to LEADS_LIST_STATUSES
+   (see that constant's own comment) so a lead an Admin has already moved
+   to "Waiting for first payment" or "First payment paid" stays visible
+   on this screen instead of vanishing before the Admin can carry it to
+   the next step.
+
    Field mapping (Airtable field -> response field), confirmed against
    the real schema via get_table_schema, not guessed:
      Name                 -> name
@@ -848,7 +952,38 @@ app.get("/api/projects", requireAuth, requireProjectsConfigured, async function 
    bookkeeping field, not lead-facing data) is deliberately excluded from
    the response too. */
 
-var LEADS_STATUS_FILTER = "Meeting Booking";
+/* 2026-09-25 "Waiting for first payment / First payment paid" — extends
+   the Leads dashboard past the single "Meeting Booking" stage so an Admin
+   can carry a lead through the post-meeting flow entirely from this
+   screen. Extended again the same day ("Update Lead -> First Payment
+   flow") to also include "Proccessed": Invoices now carries a real
+   "Lead ID" link back to Leads (added directly in Airtable), and the
+   already-live "payment-via-app-update" n8n workflow was rebuilt around
+   it (js/services/finance-webhooks.js) to set a paid Invoice's linked
+   Lead to "First payment paid" itself — the app has nothing to do with
+   that write. A separate, already-existing SCHEDULED n8n workflow (not
+   touched by this change, not called from the app) then picks up "First
+   payment paid" leads, creates the Customer + Project, and sets the lead
+   to Proccessed. Proccessed is included here (unlike the first version of
+   this list) so that a completed lead stays visible with a "process
+   complete" confirmation instead of silently vanishing from the screen —
+   see js/pages/leads.js's per-status guidance panel. Confirmed against
+   the real schema (get_table_schema) that every option string here
+   matches exactly, same care the original "Meeting Booking" filter needed
+   (see the note above about the "BOOKING MEETING" mismatch). */
+var LEADS_LIST_STATUSES = ["Meeting Booking", "Waiting for first payment", "First payment paid", "Proccessed"];
+
+/* The only status value this screen is ever allowed to write.
+   "First payment paid" was REMOVED from this list 2026-09-25 ("Update
+   Lead -> First Payment flow") — that transition is now made exclusively
+   by the payment-via-app-update n8n workflow once an Admin actually
+   completes payment on the linked Invoice (see the comment above
+   LEADS_LIST_STATUSES), never by an Admin manually flipping the Lead's
+   status from this screen. Letting the app set it directly would let an
+   Admin skip straight past actual payment. "Proccessed" was never
+   writable here and still isn't — that belongs to the scheduled
+   Customer+Project workflow alone. */
+var LEADS_WRITABLE_STATUSES = ["Waiting for first payment"];
 
 function mapLeadRecord(record) {
   const fields = record.fields || {};
@@ -860,13 +995,76 @@ function mapLeadRecord(record) {
     phone: fields.Phone || null,
     message: fields["Message Content"] || null,
     status: airtableSelectName(fields.Status),
-    created: record.createdTime || null
+    created: record.createdTime || null,
+    /* Raw linked-record ids from the real Leads.Invoices field (added
+       directly in Airtable, the inverse of Invoices' own "Lead ID") —
+       resolved to a small display object by GET /api/leads below, not
+       here, since that needs a join against Invoices/Clients this
+       function doesn't have access to. */
+    invoiceIds: fields.Invoices || []
   };
+}
+
+/* Resolves each lead's first linked Invoice (if any) to a small display
+   object — invoiceNumber/clientName/total/pdfUrl — so the "Proccessed"
+   guidance panel (js/pages/leads.js) can show the Admin which invoice and
+   client the completed lead is tied to, per this task's explicit "if
+   Customer/Project IDs or links exist, show them per the app's existing
+   structure" requirement. Deliberately resolves only the CLIENT name, not
+   that client's Projects — Clients' own "Projects" field was found to
+   have drifted into an ambiguous state during this task's investigation
+   (a same-named plain-text field alongside a separate "Projects 2" linked
+   field), unrelated to this task and not touched here; reading it would
+   risk the exact kind of crash that ambiguity could cause. Skipped
+   entirely (leads keep invoice:null) if Invoices/Clients aren't
+   configured on this backend — GET /api/leads must keep working even
+   without them, same graceful-degradation pattern as every other
+   optional join in this file. */
+async function resolveLeadInvoices(leads) {
+  if (!AIRTABLE_INVOICES_TABLE_ID || !AIRTABLE_CLIENTS_TABLE_ID) {
+    leads.forEach(function (lead) {
+      lead.invoice = null;
+    });
+    return leads;
+  }
+
+  const [invoiceRecords, clientRecords] = await Promise.all([fetchAllInvoiceRecords(), fetchAllClientRecords()]);
+
+  const clientNameById = {};
+  clientRecords.forEach(function (r) {
+    clientNameById[r.id] = (r.fields && r.fields["Client Name"]) || null;
+  });
+
+  const invoiceById = {};
+  invoiceRecords.forEach(function (record) {
+    const fields = record.fields || {};
+    if (!fields.InvoiceNumber) return;
+    const clientId = firstLinkedId(fields.ClientID);
+    const amount = typeof fields.Amount === "number" ? fields.Amount : 0;
+    const vatAmount = typeof fields.VatAmount === "number" ? fields.VatAmount : 0;
+    invoiceById[record.id] = {
+      invoiceNumber: fields.InvoiceNumber,
+      clientName: clientId ? clientNameById[clientId] || null : null,
+      total: typeof fields.Total === "number" ? fields.Total : amount + vatAmount,
+      pdfUrl: fields.PdfUrl || null
+    };
+  });
+
+  leads.forEach(function (lead) {
+    const invoiceId = firstLinkedId(lead.invoiceIds);
+    lead.invoice = invoiceId ? invoiceById[invoiceId] || null : null;
+  });
+  return leads;
 }
 
 app.get("/api/leads", requireAuth, requireRole("admin"), requireLeadsConfigured, async function (req, res) {
   try {
-    const formula = '{Status}="' + escapeForFormula(LEADS_STATUS_FILTER) + '"';
+    const formula =
+      "OR(" +
+      LEADS_LIST_STATUSES.map(function (statusValue) {
+        return '{Status}="' + escapeForFormula(statusValue) + '"';
+      }).join(",") +
+      ")";
     const records = [];
     let offset;
     do {
@@ -891,7 +1089,8 @@ app.get("/api/leads", requireAuth, requireRole("admin"), requireLeadsConfigured,
       offset = body.offset;
     } while (offset);
 
-    return res.json({ leads: records.map(mapLeadRecord) });
+    const leads = await resolveLeadInvoices(records.map(mapLeadRecord));
+    return res.json({ leads: leads });
   } catch (err) {
     console.error("[backend] Failed to fetch Leads from Airtable:", err);
     return res.status(502).json({
@@ -900,6 +1099,73 @@ app.get("/api/leads", requireAuth, requireRole("admin"), requireLeadsConfigured,
       airtableError: err.airtableError,
       details: err.airtableStatus ? undefined : err.message
     });
+  }
+});
+
+/* PATCH /api/leads/:id/status (2026-09-24 "Mark lead as Proccessed after
+   its meeting", narrowed 2026-09-25 twice — first to the "Waiting for
+   first payment / First payment paid" flow, then to just the one
+   transition below once the payment side of that flow turned out to
+   already be automated). Checked the existing n8n automation before
+   adding this: "IQRAA Workflow 2- Lead Lifecycle Agent"'s own system
+   prompt explicitly states "Processed is a valid Airtable status, but
+   this workflow does not set or manage it" (it only drives New Lead ->
+   Processing -> Meeting Booking), and no other workflow handled the
+   post-meeting transitions either. Building a brand-new n8n workflow for
+   this would violate CLAUDE.md's "don't add new n8n workflows before the
+   basic UI is clear" rule, so this follows the Users-table precedent
+   (§19b) instead — the backend makes the Airtable write directly,
+   admin-only, same as everywhere else in this file.
+
+   2026-09-25 "Update Lead -> First Payment flow": an Admin now only ever
+   manually advances a lead from Meeting Booking to Waiting for first
+   payment through this endpoint. The rest of the flow — Waiting for first
+   payment -> First payment paid -> Proccessed — turned out to already be
+   built outside the app: Invoices carries a real "Lead ID" link (added
+   directly in Airtable), and the already-live "payment-via-app-update"
+   n8n workflow (js/services/finance-webhooks.js) sets a paid Invoice's
+   linked Lead to "First payment paid" itself once an Admin completes
+   payment on it through Billing; a separate, already-existing SCHEDULED
+   n8n workflow then creates the Customer + Project and sets the lead to
+   Proccessed. So this endpoint must never accept "First payment paid" or
+   "Proccessed" — accepting either would let an Admin skip past actual
+   payment or bypass the Customer/Project creation n8n is responsible for.
+   Only "Waiting for first payment" (LEADS_WRITABLE_STATUSES) is valid —
+   a narrow "advance to exactly this one status" route, not a general "set
+   any lead to any status" one. */
+app.patch("/api/leads/:id/status", requireAuth, requireRole("admin"), requireLeadsConfigured, async function (req, res) {
+  const targetStatus = req.body && req.body.status;
+  if (LEADS_WRITABLE_STATUSES.indexOf(targetStatus) === -1) {
+    return res.status(400).json({
+      error: "status must be one of: " + LEADS_WRITABLE_STATUSES.join(", ") + "."
+    });
+  }
+
+  try {
+    const url = "https://api.airtable.com/v0/" + AIRTABLE_BASE_ID + "/" + AIRTABLE_LEADS_TABLE_ID + "/" + encodeURIComponent(req.params.id);
+    const response = await fetch(url, {
+      method: "PATCH",
+      headers: {
+        Authorization: "Bearer " + AIRTABLE_PAT,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ fields: { Status: targetStatus } })
+    });
+    const body = await response.json().catch(function () {
+      return {};
+    });
+    if (!response.ok) {
+      console.error("[backend] Airtable rejected the Lead status update:", response.status, JSON.stringify(body));
+      return res.status(502).json({
+        error: "Airtable rejected the request.",
+        airtableStatus: response.status,
+        airtableError: body && body.error
+      });
+    }
+    return res.json({ lead: mapLeadRecord(body) });
+  } catch (networkError) {
+    console.error("[backend] Could not reach Airtable to update Lead status:", networkError);
+    return res.status(502).json({ error: "Could not reach Airtable.", details: networkError.message });
   }
 });
 
@@ -1771,6 +2037,27 @@ app.get("/api/dashboard/pm", requireAuth, requireRole("pm"), requirePmDashboardC
    status / leadStatus / invoiceStatus / team.status exception in
    CLAUDE.md §12, now a fifth named category there.
 
+   ===== Invoice/Payment <-> Lead integration (2026-09-25) =====
+
+   Invoices gained a real linked-record field, "Lead ID" (-> Leads), added
+   directly in Airtable (not by this app). The live "payment-via-app-update"
+   n8n workflow (unchanged by this task, per explicit instruction) was
+   rebuilt around it: given an invoice_id, it now finds the Invoice, sets
+   its own free-text Status field to whatever "status" the app sent (the
+   app always sends "PAID"), then reads that same Invoice record's "Lead
+   ID" link and sets the linked Lead's Status to "First payment paid" —
+   it no longer searches for or touches any Payment record at all (the
+   Payments-table-based update flow this comment block describes above is
+   the PREVIOUS version of that workflow). This endpoint was extended only
+   to resolve and expose that same Lead link (leadId/leadName below) so
+   the Invoices table/detail modal can show which Lead an invoice is
+   connected to — the Payments-derived paidAmount/remaining/paymentStatus
+   fields above are UNCHANGED and still computed the old way, so a paid
+   invoice can show status "PAID" while paymentStatus still reads "unpaid"
+   until/unless a real Payment record exists for it too. That mismatch is
+   a known, reported limitation of this narrow integration task, not
+   something this task was asked to reconcile.
+
    kpis is now { invoices: {...}, payments: {...} } instead of one flat
    object — invoices.totalInvoices/totalInvoicedAmount/openUnpaidInvoices
    and payments.totalPaid/totalOutstanding/partiallyPaidInvoices/
@@ -1809,6 +2096,15 @@ function requireBillingConfigured(req, res, next) {
   if (!AIRTABLE_INVOICES_TABLE_ID) missing.push("AIRTABLE_INVOICES_TABLE_ID");
   if (!AIRTABLE_PROJECTS_TABLE_ID) missing.push("AIRTABLE_PROJECTS_TABLE_ID");
   if (!AIRTABLE_CLIENTS_TABLE_ID) missing.push("AIRTABLE_CLIENTS_TABLE_ID");
+  /* Invoices.Lead ID (2026-09-25, "Invoice/Payment <-> Lead integration")
+     — Invoices now carries a real linked-record field to Leads (added
+     directly in Airtable, not by this app), which the live
+     "payment-via-app-update" n8n workflow reads to mark the correct Lead
+     "First payment paid" once an invoice is paid. This endpoint needs the
+     Leads table too, purely to resolve that link to a display name for
+     the Invoices table/detail modal — same join pattern as clientsById
+     below, nothing invented. */
+  if (!AIRTABLE_LEADS_TABLE_ID) missing.push("AIRTABLE_LEADS_TABLE_ID");
   if (missing.length > 0) {
     return res.status(503).json({
       error: "Airtable tables required for Billing are not fully configured on this backend.",
@@ -1880,11 +2176,12 @@ function firstLinkedId(links) {
 
 app.get("/api/billing", requireAuth, requireRole("admin"), requireBillingConfigured, async function (req, res) {
   try {
-    const [paymentRecords, invoiceRecords, projectRecords, clientRecords] = await Promise.all([
+    const [paymentRecords, invoiceRecords, projectRecords, clientRecords, leadRecords] = await Promise.all([
       fetchAllPaymentRecords(),
       fetchAllInvoiceRecords(),
       fetchAllProjectRecords(),
-      fetchAllClientRecords()
+      fetchAllClientRecords(),
+      fetchAllRecordsGeneric(AIRTABLE_LEADS_TABLE_ID)
     ]);
 
     const projectsById = {};
@@ -1895,6 +2192,16 @@ app.get("/api/billing", requireAuth, requireRole("admin"), requireBillingConfigu
     const clientsById = {};
     clientRecords.forEach(function (r) {
       clientsById[r.id] = { name: (r.fields && r.fields["Client Name"]) || null };
+    });
+
+    /* Invoices.Lead ID join (2026-09-25) — resolves the linked-record id to
+       the Lead's own Name field, the same "id -> display name" pattern as
+       clientsById above. Only Name is exposed; the rest of a Lead's data
+       (email/phone/message) has no slot on this screen and stays out of
+       this response. */
+    const leadsById = {};
+    leadRecords.forEach(function (r) {
+      leadsById[r.id] = { name: (r.fields && r.fields.Name) || null };
     });
 
     /* The real Payments table has pre-existing blank placeholder rows
@@ -1942,6 +2249,7 @@ app.get("/api/billing", requireAuth, requireRole("admin"), requireBillingConfigu
       .map(function (record) {
         const fields = record.fields || {};
         const clientId = firstLinkedId(fields.ClientID);
+        const leadId = firstLinkedId(fields["Lead ID"]);
         const amount = typeof fields.Amount === "number" ? fields.Amount : 0;
         const vatAmount = typeof fields.VatAmount === "number" ? fields.VatAmount : 0;
         const total = typeof fields.Total === "number" ? fields.Total : amount + vatAmount;
@@ -1959,6 +2267,8 @@ app.get("/api/billing", requireAuth, requireRole("admin"), requireBillingConfigu
           invoiceNumber: fields.InvoiceNumber || null,
           clientId: clientId,
           clientName: clientId && clientsById[clientId] ? clientsById[clientId].name : null,
+          leadId: leadId,
+          leadName: leadId && leadsById[leadId] ? leadsById[leadId].name : null,
           amount: amount,
           vatAmount: vatAmount,
           total: total,

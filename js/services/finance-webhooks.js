@@ -36,19 +36,37 @@
    convention: pages/billing.html's "Record Payment" form shows a
    translated "not configured yet" message rather than a fake success.
 
-   PAYMENT_UPDATE_N8N_WEBHOOK_URL (added 2026-09-23, "עדכון תשלום" per-
-   invoice action) is a separate, already-built, already-live n8n workflow
-   ("payment-via-app-update") — distinct from PAYMENT_N8N_WEBHOOK_URL
-   above, which stays untouched. Its webhook trigger reads the POST body
-   directly (no action/payload envelope), expecting exactly:
+   PAYMENT_UPDATE_N8N_WEBHOOK_URL (added 2026-09-23, "ביצוע תשלום" per-
+   invoice action, workflow rebuilt 2026-09-25) is a separate, already-
+   built, already-live n8n workflow ("payment-via-app-update") — distinct
+   from PAYMENT_N8N_WEBHOOK_URL above, which stays untouched. Its webhook
+   trigger reads the POST body directly (no action/payload envelope),
+   expecting exactly:
      { invoice_id, amount_paid, status, paid_date, payment_method, notes }
    invoice_id is the Invoice's own InvoiceNumber text (e.g. "INV-2026-002",
    the same value billing.js already renders as the invoice's primary
    column / GET /api/billing's invoiceNumber) — never an Airtable record
-   id. Same "responds once triggered, doesn't wait for the Airtable write"
-   caveat as INVOICE_N8N_WEBHOOK_URL above; js/pages/billing.js refreshes
-   GET /api/billing after a short delay rather than faking the updated
-   row locally. */
+   id. status is always sent as "PAID" (js/pages/billing.js's only caller
+   of this).
+
+   **2026-09-25 rebuild, confirmed live by reading the workflow's own node
+   graph before wiring this up**: the workflow no longer searches for or
+   touches any Payment record at all (the previous version's "find the
+   invoice's linked Payment and update it" logic — and the matching
+   eligiblePaymentForInvoice() gate that used to live in billing.js — is
+   gone). It now: finds the Invoice by invoice_id -> sets that Invoice's
+   own free-text Status field to the "status" value sent above (i.e.
+   "PAID") -> reads that same Invoice record's real "Lead ID" linked-record
+   field (added directly in Airtable, not by this app) -> sets the linked
+   Lead's Status to "First payment paid" -> responds success. An invoice
+   with no Lead linked has nothing for that last step to update against,
+   so the workflow run fails and this never reaches a success response —
+   sendPaymentUpdate() below already treats anything short of an explicit
+   success:true as a failure, so that surfaces as a normal error, not a
+   fake success. Same "responds once triggered, doesn't wait for the
+   Airtable write" caveat as INVOICE_N8N_WEBHOOK_URL above; js/pages/
+   billing.js refreshes GET /api/billing after a short delay rather than
+   faking the updated row locally. */
 window.IQRAA = window.IQRAA || {};
 IQRAA.services = IQRAA.services || {};
 
@@ -111,9 +129,31 @@ IQRAA.services.financeWebhooks = (function () {
 
   /* payload: { invoice_id, amount_paid, status, paid_date, payment_method,
      notes } — the exact top-level body the payment-update webhook trigger
-     reads, no envelope. See the file comment above. */
+     reads, no envelope. See the file comment above.
+
+     Requires body.success === true explicitly, stricter than postJson's
+     own default (which only rejects an explicit success:false/valid:false
+     and otherwise resolves). This was hardened 2026-09-24 against the
+     PREVIOUS version of this workflow, whose "Search payments" step could
+     find nothing to update and never reach its success-responding node,
+     while n8n still answered with a 200 whose body had no success:false
+     either — the app showed a false "success" message while nothing was
+     ever written to Airtable. The check is kept unchanged after the
+     2026-09-25 rebuild (see the file comment above) because the same risk
+     exists in a different shape now: an invoice with no linked Lead makes
+     the workflow's Lead-update step fail, so the run never reaches its
+     success response either — this still needs to surface as a real
+     error, never a fake success. */
   function sendPaymentUpdate(payload) {
-    return postJson(PAYMENT_UPDATE_N8N_WEBHOOK_URL, payload);
+    return postJson(PAYMENT_UPDATE_N8N_WEBHOOK_URL, payload).then(function (body) {
+      if (!body || body.success !== true) {
+        var error = new Error("Webhook did not confirm the payment update");
+        error.body = body;
+        error.notConfirmed = true;
+        throw error;
+      }
+      return body;
+    });
   }
 
   return { sendInvoiceAction: sendInvoiceAction, sendPaymentAction: sendPaymentAction, sendPaymentUpdate: sendPaymentUpdate };

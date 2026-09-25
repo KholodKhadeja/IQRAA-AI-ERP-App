@@ -14,11 +14,25 @@
 
    Both come from the same GET /api/billing call (js/services/billing-
    api.js) — one fetch, two panels — re-run on every page load, same as
-   before. "Create Invoice"/"Record Payment" POST to the two named,
-   currently-empty n8n webhook placeholders in js/services/finance-
-   webhooks.js (CLAUDE.md §18/§19's external-integration-placeholder
-   convention) — with no URL configured yet, submitting shows a
-   translated "not configured" message rather than a fake success. */
+   before. "Create Invoice" POSTs to the real, already-built WF1 n8n
+   webhook; "Record Payment" still POSTs to a currently-empty placeholder
+   (CLAUDE.md §18/§19's external-integration-placeholder convention) and
+   shows a translated "not configured" message rather than a fake success.
+
+   **Invoice <-> Lead integration (2026-09-25)**: Invoices now carries a
+   real "Lead ID" linked-record field (added directly in Airtable), and
+   the existing, already-live "payment-via-app-update" n8n workflow was
+   rebuilt around it (unchanged by this task, per explicit instruction —
+   see js/services/finance-webhooks.js's file comment for the exact node
+   graph read directly from n8n before wiring this up). Given an
+   invoice_id it now sets that Invoice's own Status to "PAID" and, via its
+   Lead ID link, sets the linked Lead's Status to "First payment paid" —
+   it no longer touches the Payments table at all. The per-invoice
+   "ביצוע תשלום" action here calls that same webhook; button visibility is
+   now driven directly by the Invoice's own raw Status text (invoiceIsPaid()
+   below), not by any linked Payment record — the old Payment-search-based
+   eligiblePaymentForInvoice() gate this screen used before is gone along
+   with the workflow logic it existed to work around. */
 window.IQRAA = window.IQRAA || {};
 
 (function (ns) {
@@ -29,7 +43,6 @@ window.IQRAA = window.IQRAA || {};
     if (!ph || !api || !webhooks) return;
 
     var PLACEHOLDER = "—";
-    var PAYMENT_STATUS_TONE = { unpaid: "neutral", partial: "warning", paid: "success", overdue: "danger" };
     /* Best-effort color hint only for known values of what is otherwise a
        free-text Airtable field (Invoices.Status / Payments.Status) — the
        raw text itself is always shown untranslated, never looked up
@@ -40,7 +53,6 @@ window.IQRAA = window.IQRAA || {};
       /* The WF1 n8n invoice workflow's own Invoices.Status values. */
       new: "info", validated: "success", invalid: "danger"
     };
-    var PAYMENT_STATUS_KEYS = ["unpaid", "partial", "paid", "overdue"];
     /* How long to wait for the WF1 n8n invoice workflow to actually finish
        (webhook trigger -> client lookup -> create -> validate) before
        telling the admin it hasn't been confirmed yet — see
@@ -53,7 +65,6 @@ window.IQRAA = window.IQRAA || {};
 
     var invSearch = document.getElementById("invoices-search");
     var invStatusFilter = document.getElementById("invoices-filter-status");
-    var invPaymentStatusFilter = document.getElementById("invoices-filter-payment-status");
     var invSort = document.getElementById("invoices-sort");
     var invCreateBtn = document.getElementById("invoices-create-btn");
 
@@ -72,12 +83,16 @@ window.IQRAA = window.IQRAA || {};
 
     function kpiCardHtml(item) {
       return (
-        '<div class="kpi-card">' +
+        '<div class="kpi-card billing-kpi-card billing-kpi-card--' + item.tone + '">' +
         kpiIcon(item.icon) +
         '<span class="kpi-card__value">' + item.value + "</span>" +
         '<span class="kpi-card__label">' + ns.i18n.t(item.labelKey) + "</span>" +
         "</div>"
       );
+    }
+
+    function panelIcon(name) {
+      return ns.icons[name](18);
     }
 
     function rawStatusBadge(text) {
@@ -86,23 +101,40 @@ window.IQRAA = window.IQRAA || {};
       return ph.badge(text, tone);
     }
 
-    function paymentStatusBadge(key) {
-      return ph.badge(ns.i18n.t("paymentStatus." + key), PAYMENT_STATUS_TONE[key] || "neutral");
+    /* Whether this invoice's own raw Status text (Airtable free-text field,
+       set directly by the payment-via-app-update n8n workflow to "PAID")
+       already reads as paid — the single source of truth for showing the
+       "ביצוע תשלום" action, per the 2026-09-25 Invoice<->Lead integration.
+       Case-insensitive/trimmed since it's free text, not a select. */
+    function invoiceIsPaid(inv) {
+      return !!(inv && inv.status && inv.status.trim().toUpperCase() === "PAID");
+    }
+
+    function stateHtml(modifier, icon, text) {
+      return (
+        '<div class="billing-state billing-state--' + modifier + '">' +
+        '<span class="billing-state__icon" aria-hidden="true">' + icon + "</span>" +
+        '<p class="billing-state__text">' + text + "</p>" +
+        "</div>"
+      );
     }
 
     function renderLoading() {
       document.getElementById("billing-invoices-kpi-grid").innerHTML = "";
       document.getElementById("billing-payments-kpi-grid").innerHTML = "";
-      var spinner =
-        '<p class="panel__empty"><span class="btn__spinner" aria-hidden="true">' + ns.icons.loader2(16) + "</span> " + ns.i18n.t("billing.loading") + "</p>";
-      document.getElementById("invoices-list-body").innerHTML = spinner;
+      document.getElementById("invoices-list-body").innerHTML = stateHtml(
+        "loading",
+        '<span class="btn__spinner" aria-hidden="true">' + ns.icons.loader2(22) + "</span>",
+        ns.i18n.t("billing.loading")
+      );
       document.getElementById("payments-list-body").innerHTML = "";
     }
 
     function renderError() {
       document.getElementById("invoices-list-body").innerHTML =
-        '<div class="panel__empty">' +
-        "<p>" + ns.i18n.t("billing.loadError") + "</p>" +
+        '<div class="billing-state billing-state--error">' +
+        '<span class="billing-state__icon" aria-hidden="true">' + ns.icons.alertTriangle(22) + "</span>" +
+        "<p class=\"billing-state__text\">" + ns.i18n.t("billing.loadError") + "</p>" +
         '<button type="button" class="btn btn--secondary" id="billing-retry-btn">' + ns.i18n.t("billing.retry") + "</button>" +
         "</div>";
       document.getElementById("payments-list-body").innerHTML = "";
@@ -113,9 +145,9 @@ window.IQRAA = window.IQRAA || {};
     function renderInvoicesKpis() {
       var k = billingData.kpis.invoices || {};
       var items = [
-        { icon: "listChecks", value: String(k.totalInvoices || 0), labelKey: "billing.kpiTotalInvoices" },
-        { icon: "creditCard", value: ph.formatCurrency(k.totalInvoicedAmount || 0), labelKey: "billing.kpiTotalInvoicedAmount" },
-        { icon: "alertTriangle", value: String(k.openUnpaidInvoices || 0), labelKey: "billing.kpiOpenInvoices" }
+        { icon: "listChecks", tone: "primary", value: String(k.totalInvoices || 0), labelKey: "billing.kpiTotalInvoices" },
+        { icon: "creditCard", tone: "success", value: ph.formatCurrency(k.totalInvoicedAmount || 0), labelKey: "billing.kpiTotalInvoicedAmount" },
+        { icon: "alertTriangle", tone: "warning", value: String(k.openUnpaidInvoices || 0), labelKey: "billing.kpiOpenInvoices" }
       ];
       document.getElementById("billing-invoices-kpi-grid").innerHTML = items.map(kpiCardHtml).join("");
     }
@@ -123,12 +155,19 @@ window.IQRAA = window.IQRAA || {};
     function renderPaymentsKpis() {
       var k = billingData.kpis.payments || {};
       var items = [
-        { icon: "check", value: ph.formatCurrency(k.totalPaid || 0), labelKey: "billing.kpiTotalPaid" },
-        { icon: "clock", value: ph.formatCurrency(k.totalOutstanding || 0), labelKey: "billing.kpiTotalOutstanding" },
-        { icon: "trendingUp", value: String(k.partiallyPaidInvoices || 0), labelKey: "billing.kpiPartiallyPaid" },
-        { icon: "alertTriangle", value: String(k.overduePayments || 0), labelKey: "billing.kpiOverduePayments" }
+        { icon: "check", tone: "success", value: ph.formatCurrency(k.totalPaid || 0), labelKey: "billing.kpiTotalPaid" },
+        { icon: "clock", tone: "warning", value: ph.formatCurrency(k.totalOutstanding || 0), labelKey: "billing.kpiTotalOutstanding" },
+        { icon: "trendingUp", tone: "primary", value: String(k.partiallyPaidInvoices || 0), labelKey: "billing.kpiPartiallyPaid" },
+        { icon: "alertTriangle", tone: "danger", value: String(k.overduePayments || 0), labelKey: "billing.kpiOverduePayments" }
       ];
       document.getElementById("billing-payments-kpi-grid").innerHTML = items.map(kpiCardHtml).join("");
+    }
+
+    function renderPanelIcons() {
+      var invIcon = document.getElementById("invoices-panel-icon");
+      var payIcon = document.getElementById("payments-panel-icon");
+      if (invIcon && !invIcon.innerHTML) invIcon.innerHTML = panelIcon("creditCard");
+      if (payIcon && !payIcon.innerHTML) payIcon.innerHTML = panelIcon("trendingUp");
     }
 
     function populateInvoiceFilters() {
@@ -141,12 +180,6 @@ window.IQRAA = window.IQRAA || {};
         '<option value="">' + ns.i18n.t("billing.allInvoiceStatuses") + "</option>" +
         statusValues.map(function (s) { return '<option value="' + s + '">' + s + "</option>"; }).join("");
       invStatusFilter.value = previousStatus;
-
-      var previousPaymentStatus = invPaymentStatusFilter.value;
-      invPaymentStatusFilter.innerHTML =
-        '<option value="">' + ns.i18n.t("billing.allPaymentStatuses") + "</option>" +
-        PAYMENT_STATUS_KEYS.map(function (k) { return '<option value="' + k + '">' + ns.i18n.t("paymentStatus." + k) + "</option>"; }).join("");
-      invPaymentStatusFilter.value = previousPaymentStatus;
 
       if (!invSort.options.length) {
         invSort.innerHTML =
@@ -199,7 +232,6 @@ window.IQRAA = window.IQRAA || {};
         if (number.indexOf(query) === -1 && client.indexOf(query) === -1) return false;
       }
       if (invStatusFilter.value && inv.status !== invStatusFilter.value) return false;
-      if (invPaymentStatusFilter.value && inv.paymentStatus !== invPaymentStatusFilter.value) return false;
       return true;
     }
 
@@ -250,19 +282,21 @@ window.IQRAA = window.IQRAA || {};
     function renderInvoicesTable() {
       var host = document.getElementById("invoices-list-body");
       var list = sortInvoices(billingData.invoices.filter(matchesInvoiceFilters));
+      var countBadge = document.getElementById("invoices-count-badge");
+      if (countBadge) countBadge.textContent = list.length + " " + ns.i18n.t("billing.resultsCount");
       if (list.length === 0) {
-        host.innerHTML = '<p class="panel__empty">' + ns.i18n.t("billing.emptyInvoicesResults") + "</p>";
+        host.innerHTML = stateHtml("empty", panelIcon("creditCard"), ns.i18n.t("billing.emptyInvoicesResults"));
         return;
       }
       var head =
         "<tr>" +
         "<th>" + ns.i18n.t("billingFields.invoiceNumber") + "</th>" +
         "<th>" + ns.i18n.t("billingFields.client") + "</th>" +
+        "<th>" + ns.i18n.t("billingFields.lead") + "</th>" +
         "<th>" + ns.i18n.t("billingFields.amountBeforeVat") + "</th>" +
         "<th>" + ns.i18n.t("billingFields.vat") + "</th>" +
         "<th>" + ns.i18n.t("billingFields.total") + "</th>" +
         "<th>" + ns.i18n.t("billingFields.status") + "</th>" +
-        "<th>" + ns.i18n.t("billing.filterPaymentStatusLabel") + "</th>" +
         "<th>" + ns.i18n.t("billingFields.created") + "</th>" +
         "<th>" + ns.i18n.t("billingFields.document") + "</th>" +
         "<th></th>" +
@@ -276,22 +310,22 @@ window.IQRAA = window.IQRAA || {};
             "<tr>" +
             '<td data-label="' + ns.i18n.t("billingFields.invoiceNumber") + '"><button type="button" class="data-table__primary" data-invoice-open="' + inv.id + '">' + (inv.invoiceNumber || PLACEHOLDER) + "</button></td>" +
             '<td data-label="' + ns.i18n.t("billingFields.client") + '">' + (inv.clientName || PLACEHOLDER) + "</td>" +
+            '<td data-label="' + ns.i18n.t("billingFields.lead") + '">' + (inv.leadName || PLACEHOLDER) + "</td>" +
             '<td data-label="' + ns.i18n.t("billingFields.amountBeforeVat") + '">' + ph.formatCurrency(inv.amount) + "</td>" +
             '<td data-label="' + ns.i18n.t("billingFields.vat") + '">' + ph.formatCurrency(inv.vatAmount) + "</td>" +
-            '<td data-label="' + ns.i18n.t("billingFields.total") + '">' + ph.formatCurrency(inv.total) + "</td>" +
+            '<td class="billing-amount-cell" data-label="' + ns.i18n.t("billingFields.total") + '">' + ph.formatCurrency(inv.total) + "</td>" +
             '<td data-label="' + ns.i18n.t("billingFields.status") + '">' + rawStatusBadge(inv.status) + "</td>" +
-            '<td data-label="' + ns.i18n.t("billing.filterPaymentStatusLabel") + '">' + paymentStatusBadge(inv.paymentStatus) + "</td>" +
             '<td data-label="' + ns.i18n.t("billingFields.created") + '">' + (inv.created ? ph.formatDate(inv.created) : PLACEHOLDER) + "</td>" +
             '<td data-label="' + ns.i18n.t("billingFields.document") + '">' + docCell + "</td>" +
-            "<td>" + (inv.paymentStatus === "paid"
-              ? ""
-              : '<button type="button" class="btn btn--secondary" data-invoice-update-payment="' + inv.id + '">' + ns.i18n.t("billing.updatePaymentAction") + "</button>") +
+            "<td>" + (!invoiceIsPaid(inv)
+              ? '<button type="button" class="btn btn--secondary" data-invoice-update-payment="' + inv.id + '">' + ns.i18n.t("billing.updatePaymentAction") + "</button>"
+              : "") +
             "</td>" +
             "</tr>"
           );
         })
         .join("");
-      host.innerHTML = '<table class="data-table"><thead>' + head + "</thead><tbody>" + rows + "</tbody></table>";
+      host.innerHTML = '<table class="data-table billing-table"><thead>' + head + "</thead><tbody>" + rows + "</tbody></table>";
 
       host.querySelectorAll("[data-invoice-open]").forEach(function (btn) {
         btn.addEventListener("click", function () {
@@ -315,8 +349,10 @@ window.IQRAA = window.IQRAA || {};
     function renderPaymentsTable() {
       var host = document.getElementById("payments-list-body");
       var list = sortPayments(billingData.payments.filter(matchesPaymentFilters));
+      var countBadge = document.getElementById("payments-count-badge");
+      if (countBadge) countBadge.textContent = list.length + " " + ns.i18n.t("billing.resultsCount");
       if (list.length === 0) {
-        host.innerHTML = '<p class="panel__empty">' + ns.i18n.t("billing.emptyPaymentsResults") + "</p>";
+        host.innerHTML = stateHtml("empty", panelIcon("trendingUp"), ns.i18n.t("billing.emptyPaymentsResults"));
         return;
       }
       var head =
@@ -332,19 +368,23 @@ window.IQRAA = window.IQRAA || {};
         "<th>" + ns.i18n.t("billingFields.paidDate") + "</th>" +
         "<th>" + ns.i18n.t("billingFields.notes") + "</th>" +
         "</tr>";
+      var today = new Date().toISOString().slice(0, 10);
       var rows = list
         .map(function (p) {
           var projectCell = p.projectId
             ? '<a class="data-table__primary" href="' + ph.projectLink(p.projectId) + '">' + (p.projectName || PLACEHOLDER) + "</a>"
             : (p.projectName || PLACEHOLDER);
+          var statusLower = (p.status || "").trim().toLowerCase();
+          var isOverdue = statusLower === "overdue" || (statusLower !== "paid" && p.dueDate && p.dueDate < today);
+          var rowClass = isOverdue ? ' class="billing-row--danger"' : statusLower === "pending" ? ' class="billing-row--warning"' : "";
           return (
-            "<tr>" +
+            "<tr" + rowClass + ">" +
             '<td data-label="' + ns.i18n.t("billingFields.paymentId") + '">' + (p.paymentId || PLACEHOLDER) + "</td>" +
             '<td data-label="' + ns.i18n.t("billingFields.client") + '">' + (p.clientName || PLACEHOLDER) + "</td>" +
             '<td data-label="' + ns.i18n.t("billingFields.invoice") + '">' + (p.invoiceNumber || PLACEHOLDER) + "</td>" +
             '<td data-label="' + ns.i18n.t("billingFields.project") + '">' + projectCell + "</td>" +
             '<td data-label="' + ns.i18n.t("billingFields.paymentType") + '">' + (p.paymentType || PLACEHOLDER) + "</td>" +
-            '<td data-label="' + ns.i18n.t("billingFields.amount") + '">' + ph.formatCurrency(p.amount) + "</td>" +
+            '<td class="billing-amount-cell" data-label="' + ns.i18n.t("billingFields.amount") + '">' + ph.formatCurrency(p.amount) + "</td>" +
             '<td data-label="' + ns.i18n.t("billingFields.status") + '">' + rawStatusBadge(p.status) + "</td>" +
             '<td data-label="' + ns.i18n.t("billingFields.dueDate") + '">' + (p.dueDate ? ph.formatDate(p.dueDate) : PLACEHOLDER) + "</td>" +
             '<td data-label="' + ns.i18n.t("billingFields.paidDate") + '">' + (p.paidDate ? ph.formatDate(p.paidDate) : PLACEHOLDER) + "</td>" +
@@ -353,7 +393,7 @@ window.IQRAA = window.IQRAA || {};
           );
         })
         .join("");
-      host.innerHTML = '<table class="data-table"><thead>' + head + "</thead><tbody>" + rows + "</tbody></table>";
+      host.innerHTML = '<table class="data-table billing-table"><thead>' + head + "</thead><tbody>" + rows + "</tbody></table>";
     }
 
     function openInvoiceDetails(inv) {
@@ -384,21 +424,20 @@ window.IQRAA = window.IQRAA || {};
 
       var body =
         ph.fieldRow("billingFields.client", inv.clientName || PLACEHOLDER) +
+        ph.fieldRow("billingFields.lead", inv.leadName || PLACEHOLDER) +
         ph.fieldRow("billingFields.amountBeforeVat", ph.formatCurrency(inv.amount)) +
         ph.fieldRow("billingFields.vat", ph.formatCurrency(inv.vatAmount)) +
         ph.fieldRow("billingFields.total", ph.formatCurrency(inv.total)) +
         ph.fieldRow("billingFields.status", rawStatusBadge(inv.status)) +
         ph.fieldRow("billingFields.created", inv.created ? ph.formatDate(inv.created) : PLACEHOLDER) +
         ph.fieldRow("billingFields.document", docLine) +
-        ph.fieldRow("billingFields.paidAmount", ph.formatCurrency(inv.paidAmount)) +
-        ph.fieldRow("billingFields.remaining", ph.formatCurrency(inv.remaining)) +
-        ph.fieldRow("billing.filterPaymentStatusLabel", paymentStatusBadge(inv.paymentStatus)) +
         '<p class="note-text"><strong>' + ns.i18n.t("billing.paymentRecordsHeading") + "</strong></p>" +
         paymentsHtml;
       ns.components.modal.open(inv.invoiceNumber || PLACEHOLDER, body);
     }
 
-    /* "עדכון תשלום" per-invoice action (2026-09-23) — posts directly to the
+    /* "ביצוע תשלום" per-invoice action (2026-09-23, rebuilt for the
+       Invoice<->Lead integration 2026-09-25) — posts directly to the
        already-live, already-built "payment-via-app-update" n8n webhook
        (js/services/finance-webhooks.js's sendPaymentUpdate()), a separate
        workflow from the Create-Invoice/Record-Payment ones above. Same
@@ -410,19 +449,43 @@ window.IQRAA = window.IQRAA || {};
        access check (backend/server.js's GET /api/auth/me), not merely by
        this button being hidden from other roles. */
     function openUpdatePaymentForm(inv) {
+      /* Defensive: the triggering button (renderInvoicesTable) already
+         hides itself once invoiceIsPaid() is true, but billingData can
+         have refreshed (e.g. another admin tab) between render and click,
+         so this re-checks rather than trusting the caller — this is the
+         "prevent accidental duplicate payment requests" guard for an
+         already-paid invoice. */
+      if (invoiceIsPaid(inv)) {
+        ns.components.modal.open(ns.i18n.t("billing.updatePaymentTitle") + " " + (inv.invoiceNumber || PLACEHOLDER), '<p class="note-text">' + ns.i18n.t("billing.updatePaymentAlreadyPaid") + "</p>");
+        return;
+      }
+
       var idp = "payment-update-form";
       /* Only "PAID" is meaningful end-to-end (the payment-via-app-update
-         n8n workflow marks one linked Payment as Paid) — no status picker,
-         see CLAUDE.md §19e's Admin billing integration audit. Method list
-         matches exactly what that workflow's Code-validation node accepts. */
+         n8n workflow sets the Invoice's own Status to whatever is sent
+         here, then marks its linked Lead "First payment paid") — no
+         status picker, see CLAUDE.md §19e's Admin billing integration
+         audit. Method list matches exactly what that workflow's
+         Code-validation node accepts. */
       var methodOptions = ["Bank Transfer", "Cash", "Check", "Other"]
         .map(function (m) { return '<option value="' + m + '">' + m + "</option>"; })
         .join("");
       var todayIso = new Date().toISOString().slice(0, 10);
 
+      /* amount_paid is pre-filled from the invoice's own Total (incl. VAT)
+         — the workflow no longer touches a separate Payment record with
+         its own Amount to copy from, so the invoice's real Total is the
+         only meaningful default. Still an editable number field, not
+         read-only, in case the admin is recording a different amount. */
+      var invoiceInfo =
+        ph.fieldRow("billingFields.client", inv.clientName || PLACEHOLDER) +
+        ph.fieldRow("billingFields.lead", inv.leadName || PLACEHOLDER) +
+        ph.fieldRow("billingFields.total", ph.formatCurrency(inv.total));
+
       var fields =
         '<div class="text-field"><label class="text-field__label" for="' + idp + '-invoiceId">' + ns.i18n.t("billingFields.invoiceNumber") + "</label>" +
         '<input id="' + idp + '-invoiceId" class="text-field__input" type="text" value="' + (inv.invoiceNumber || "") + '" readonly disabled /></div>' +
+        invoiceInfo +
         '<p class="note-text">' + ns.i18n.t("billing.updatePaymentNote") + "</p>" +
         ns.components.textField.render({ id: idp + "-amount", labelI18nKey: "billing.amountPaidLabel", required: true, type: "number" }) +
         ns.components.textField.render({ id: idp + "-paidDate", labelI18nKey: "billing.paidDateLabel", required: true, type: "date" }) +
@@ -450,6 +513,7 @@ window.IQRAA = window.IQRAA || {};
       var touched = {};
 
       paidDateInput.value = todayIso;
+      amountInput.value = inv.total;
 
       function validateAmount() {
         if (!touched.amount) return true;
@@ -567,6 +631,7 @@ window.IQRAA = window.IQRAA || {};
       var text;
       if (error && error.notConfigured) text = ns.i18n.t("billing.notConfigured");
       else if (error && error.timeout) text = ns.i18n.t("billing.actionTimeout");
+      else if (error && error.notConfirmed) text = ns.i18n.t("billing.updatePaymentNotConfirmed");
       else text = ns.i18n.t("billing.actionError");
       errorEl.textContent = text;
       errorEl.hidden = false;
@@ -848,6 +913,7 @@ window.IQRAA = window.IQRAA || {};
     }
 
     function renderAll() {
+      renderPanelIcons();
       renderInvoicesKpis();
       renderPaymentsKpis();
       populateInvoiceFilters();
@@ -857,6 +923,7 @@ window.IQRAA = window.IQRAA || {};
     }
 
     function loadBilling() {
+      renderPanelIcons();
       renderLoading();
       api
         .getBilling()
@@ -872,7 +939,6 @@ window.IQRAA = window.IQRAA || {};
 
     invSearch.addEventListener("input", renderInvoicesTable);
     invStatusFilter.addEventListener("change", renderInvoicesTable);
-    invPaymentStatusFilter.addEventListener("change", renderInvoicesTable);
     invSort.addEventListener("change", renderInvoicesTable);
     invCreateBtn.addEventListener("click", openCreateInvoiceForm);
 
