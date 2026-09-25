@@ -20,7 +20,7 @@ window.IQRAA = window.IQRAA || {};
      "n8n Workflows/Landing_Lead_Capture_Workflow.json"). Not a secret —
      there's no build step to inject an env var here, so it's a plain
      constant. Leave empty to fall back to a local-only demo success. */
-  var N8N_LEAD_WEBHOOK_URL = "https://kholod-khadeja.app.n8n.cloud/webhook/landing-lead-form";
+  var N8N_LEAD_WEBHOOK_URL = "https://kholod-khadeja.app.n8n.cloud/webhook/c4982a0b-c43f-4ab0-b4b4-88c5b72510d0";
 
   document.addEventListener("DOMContentLoaded", function () {
     var form = document.getElementById("contact-form");

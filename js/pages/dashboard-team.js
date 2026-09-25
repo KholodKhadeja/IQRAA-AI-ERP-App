@@ -52,8 +52,9 @@ window.IQRAA = window.IQRAA || {};
       });
     }
 
-    function kpiIcon(name) {
-      return '<span class="kpi-card__icon" aria-hidden="true">' + ns.icons[name](20) + "</span>";
+    function kpiIcon(name, accent) {
+      var accentClass = accent ? " kpi-card__icon--" + accent : "";
+      return '<span class="kpi-card__icon' + accentClass + '" aria-hidden="true">' + ns.icons[name](20) + "</span>";
     }
 
     function renderKpis() {
@@ -61,16 +62,16 @@ window.IQRAA = window.IQRAA || {};
         return t.status !== "completed";
       });
       var items = [
-        { icon: "calendar", value: myTasks.filter(function (t) { return t.status !== "completed" && isToday(t.dueDate); }).length, labelKey: "myWorkspace.kpiTasksToday" },
-        { icon: "clock", value: openTasks.filter(function (t) { return ph.isOverdue(t.dueDate); }).length, labelKey: "myWorkspace.kpiTasksOverdue" },
-        { icon: "listChecks", value: myTasks.filter(function (t) { return t.status === "inProgress"; }).length, labelKey: "myWorkspace.kpiTasksInProgress" },
-        { icon: "folder", value: myProjects.length, labelKey: "myWorkspace.kpiMyProjects" }
+        { icon: "calendar", accent: "blue", value: myTasks.filter(function (t) { return t.status !== "completed" && isToday(t.dueDate); }).length, labelKey: "myWorkspace.kpiTasksToday" },
+        { icon: "clock", accent: "rose", value: openTasks.filter(function (t) { return ph.isOverdue(t.dueDate); }).length, labelKey: "myWorkspace.kpiTasksOverdue" },
+        { icon: "listChecks", accent: "amber", value: myTasks.filter(function (t) { return t.status === "inProgress"; }).length, labelKey: "myWorkspace.kpiTasksInProgress" },
+        { icon: "folder", accent: "purple", value: myProjects.length, labelKey: "myWorkspace.kpiMyProjects" }
       ];
       document.getElementById("team-kpi-grid").innerHTML = items
         .map(function (item) {
           return (
-            '<div class="kpi-card">' +
-            kpiIcon(item.icon) +
+            '<div class="kpi-card kpi-card--' + item.accent + '">' +
+            kpiIcon(item.icon, item.accent) +
             '<span class="kpi-card__value">' + item.value + "</span>" +
             '<span class="kpi-card__label">' + ns.i18n.t(item.labelKey) + "</span>" +
             "</div>"

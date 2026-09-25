@@ -112,7 +112,7 @@ window.IQRAA = window.IQRAA || {};
           var tag = item.href ? "a" : "div";
           var hrefAttr = item.href ? ' href="' + item.href + '"' : "";
           return (
-            "<" + tag + ' class="kpi-card"' + hrefAttr + ">" +
+            "<" + tag + ' class="kpi-card kpi-card--' + item.accent + '"' + hrefAttr + ">" +
             kpiIcon(item.icon, item.accent) +
             '<span class="kpi-card__value">' + item.value + "</span>" +
             '<span class="kpi-card__label">' + ns.i18n.t(item.labelKey) + "</span>" +
@@ -120,6 +120,43 @@ window.IQRAA = window.IQRAA || {};
           );
         })
         .join("");
+    }
+
+    /* Personalized greeting banner — reuses kpis already fetched for the
+       KPI row (no extra request) to build a one-line live summary instead
+       of a static "welcome" caption. See css/components/data-display.css's
+       .overview-hero for the shared, role-agnostic styling. */
+    function heroGreetingKey() {
+      var hour = new Date().getHours();
+      if (hour < 12) return "adminOverview.heroGreetingMorning";
+      if (hour < 18) return "adminOverview.heroGreetingAfternoon";
+      return "adminOverview.heroGreetingEvening";
+    }
+
+    function renderHero(kpis, user) {
+      var host = document.getElementById("admin-overview-hero");
+      if (!host) return;
+      var name = (user && (user.fullName || user.email)) || "";
+      var greeting = ns.i18n.t(heroGreetingKey()) + (name ? ", " + name : "") + " 👋";
+
+      var subtitleParts = [];
+      if (kpis.newLeads > 0) subtitleParts.push(kpis.newLeads + " " + ns.i18n.t("adminOverview.heroSubtitleLeadsPart"));
+      if (kpis.overdueTasks > 0) subtitleParts.push(kpis.overdueTasks + " " + ns.i18n.t("adminOverview.heroSubtitleOverduePart"));
+      var subtitle = subtitleParts.length ? subtitleParts.join(" · ") : ns.i18n.t("adminOverview.heroSubtitleAllGood");
+
+      var cta = kpis.newLeads > 0
+        ? { href: "leads.html", labelKey: "adminOverview.heroCtaLeads" }
+        : { href: "projects.html", labelKey: "adminOverview.heroCtaProjects" };
+
+      host.innerHTML =
+        '<h2 class="overview-hero__title">' + greeting + "</h2>" +
+        '<p class="overview-hero__subtitle">' + subtitle + "</p>" +
+        '<div class="overview-hero__actions">' +
+        '<a class="overview-hero__cta" href="' + cta.href + '">' +
+        ns.icons.arrowLeft(16) +
+        "<span>" + ns.i18n.t(cta.labelKey) + "</span>" +
+        "</a>" +
+        "</div>";
     }
 
     function renderActiveProjects(projects) {
@@ -250,7 +287,8 @@ window.IQRAA = window.IQRAA || {};
         .join("");
     }
 
-    function renderAll(dashboard) {
+    function renderAll(dashboard, user) {
+      renderHero(dashboard.kpis, user);
       renderKpis(dashboard.kpis);
       renderActiveProjects(dashboard.activeProjects);
       renderStageSummary(dashboard.projectsByStage);
@@ -263,10 +301,12 @@ window.IQRAA = window.IQRAA || {};
 
     function loadDashboard() {
       renderLoading();
-      api
-        .getAdminDashboard()
-        .then(function (dashboard) {
-          renderAll(dashboard);
+      /* ns.workspaceAuthReady is the same session check workspace-chrome.js
+         already runs to gate this page — reused here (not a second fetch)
+         purely to get the signed-in admin's name for the hero greeting. */
+      Promise.all([api.getAdminDashboard(), ns.workspaceAuthReady])
+        .then(function (results) {
+          renderAll(results[0], results[1] && results[1].user);
         })
         .catch(function (err) {
           console.error("[dashboard-admin] Failed to load dashboard data from the backend:", err);

@@ -37,8 +37,9 @@ window.IQRAA = window.IQRAA || {};
 
     var SECTION_IDS = ["pm-kpi-grid", "pm-projects-body", "pm-attention-tasks", "pm-activity-list"];
 
-    function kpiIcon(name) {
-      return '<span class="kpi-card__icon" aria-hidden="true">' + ns.icons[name](20) + "</span>";
+    function kpiIcon(name, accent) {
+      var accentClass = accent ? " kpi-card__icon--" + accent : "";
+      return '<span class="kpi-card__icon' + accentClass + '" aria-hidden="true">' + ns.icons[name](20) + "</span>";
     }
 
     function renderLoading() {
@@ -69,16 +70,16 @@ window.IQRAA = window.IQRAA || {};
 
     function renderKpis(kpis) {
       var items = [
-        { icon: "folder", value: kpis.activeProjects, labelKey: "pmOverview.kpiActiveProjects" },
-        { icon: "alertTriangle", value: kpis.tasksNeedingAttention, labelKey: "pmOverview.kpiTasksAttention" },
-        { icon: "clock", value: kpis.overdueTasks, labelKey: "pmOverview.kpiOverdueTasks" },
-        { icon: "calendar", value: kpis.upcomingDeadlines, labelKey: "pmOverview.kpiUpcomingDeadlines" }
+        { icon: "folder", accent: "purple", value: kpis.activeProjects, labelKey: "pmOverview.kpiActiveProjects" },
+        { icon: "alertTriangle", accent: "amber", value: kpis.tasksNeedingAttention, labelKey: "pmOverview.kpiTasksAttention" },
+        { icon: "clock", accent: "rose", value: kpis.overdueTasks, labelKey: "pmOverview.kpiOverdueTasks" },
+        { icon: "calendar", accent: "blue", value: kpis.upcomingDeadlines, labelKey: "pmOverview.kpiUpcomingDeadlines" }
       ];
       document.getElementById("pm-kpi-grid").innerHTML = items
         .map(function (item) {
           return (
-            '<div class="kpi-card">' +
-            kpiIcon(item.icon) +
+            '<div class="kpi-card kpi-card--' + item.accent + '">' +
+            kpiIcon(item.icon, item.accent) +
             '<span class="kpi-card__value">' + item.value + "</span>" +
             '<span class="kpi-card__label">' + ns.i18n.t(item.labelKey) + "</span>" +
             "</div>"

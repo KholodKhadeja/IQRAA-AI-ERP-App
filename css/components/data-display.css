@@ -151,13 +151,81 @@
   transition:
     transform var(--transition-fast),
     border-color var(--transition-fast),
-    box-shadow var(--transition-fast);
+    box-shadow var(--transition-fast),
+    background var(--transition-fast);
 }
 
 a.kpi-card:hover {
   border-color: var(--primary);
   box-shadow: var(--shadow-md);
   transform: translateY(-2px);
+}
+
+/* Tone variants — a tinted gradient wash + a colored leading edge per card,
+   established on Billing (CLAUDE.md §19e) and generalized here so every
+   KPI row across the Workspace (Admin/PM/Team/Client Overview, Billing)
+   can share the same vivid, glanceable read instead of a flat white card
+   with only a colored icon chip. Names match the existing
+   .kpi-card__icon--* accent set so a page only needs to add one modifier
+   class per card. Value-text color is reserved for the two "count of
+   concern" tones (rose/amber) — purple/green/teal/blue stay categorical,
+   not severity, per the accent tokens' own convention in tokens.css. */
+.kpi-card--purple,
+.kpi-card--green,
+.kpi-card--teal,
+.kpi-card--blue,
+.kpi-card--rose,
+.kpi-card--amber {
+  border-inline-start-width: 4px;
+  border-inline-start-style: solid;
+}
+
+.kpi-card:hover.kpi-card--purple,
+.kpi-card:hover.kpi-card--green,
+.kpi-card:hover.kpi-card--teal,
+.kpi-card:hover.kpi-card--blue,
+.kpi-card:hover.kpi-card--rose,
+.kpi-card:hover.kpi-card--amber {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.kpi-card--purple {
+  border-inline-start-color: var(--primary);
+  background: linear-gradient(160deg, var(--primary-soft) 0%, var(--surface) 65%);
+}
+
+.kpi-card--green {
+  border-inline-start-color: var(--success);
+  background: linear-gradient(160deg, var(--success-soft) 0%, var(--surface) 65%);
+}
+
+.kpi-card--teal {
+  border-inline-start-color: var(--accent-teal);
+  background: linear-gradient(160deg, var(--accent-teal-soft) 0%, var(--surface) 65%);
+}
+
+.kpi-card--blue {
+  border-inline-start-color: var(--accent-blue);
+  background: linear-gradient(160deg, var(--accent-blue-soft) 0%, var(--surface) 65%);
+}
+
+.kpi-card--rose {
+  border-inline-start-color: var(--accent-rose);
+  background: linear-gradient(160deg, var(--accent-rose-soft) 0%, var(--surface) 65%);
+}
+
+.kpi-card--rose .kpi-card__value {
+  color: var(--accent-rose);
+}
+
+.kpi-card--amber {
+  border-inline-start-color: var(--accent-amber);
+  background: linear-gradient(160deg, var(--accent-amber-soft) 0%, var(--surface) 65%);
+}
+
+.kpi-card--amber .kpi-card__value {
+  color: var(--accent-amber);
 }
 
 .kpi-card__icon {
@@ -657,6 +725,113 @@ a.kpi-card:hover {
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
   font-weight: 700;
+}
+
+/* Overview hero banner — a personalized greeting + one-line live summary
+   at the top of a role's Overview dashboard (2026-09-25, "give Admin
+   Overview the same vivid, glanceable read as Billing" pass). Brand-purple
+   gradient with soft decorative circles (CSS-only, no photo — the internal
+   Workspace deliberately never reuses the public/marketing photo-pane
+   pattern, CLAUDE.md §8). Shared here, not page-scoped, so any Overview
+   page can adopt it the same way Admin Overview does. */
+.overview-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  padding: var(--space-6) var(--space-5);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  color: #fff;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.overview-hero::before,
+.overview-hero::after {
+  content: "";
+  position: absolute;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.1);
+  pointer-events: none;
+}
+
+.overview-hero::before {
+  width: 260px;
+  height: 260px;
+  top: -120px;
+  inset-inline-end: -60px;
+}
+
+.overview-hero::after {
+  width: 160px;
+  height: 160px;
+  bottom: -90px;
+  inset-inline-end: 18%;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.overview-hero__eyebrow {
+  position: relative;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #fff;
+}
+
+.overview-hero__title {
+  position: relative;
+  font-size: var(--font-size-xl);
+  font-weight: 800;
+  line-height: var(--line-height-tight);
+  color: #fff;
+}
+
+.overview-hero__subtitle {
+  position: relative;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  /* Solid, not alpha-transparent — deliberate: a transparent white here
+     measured under 4.5:1 against the lighter end of the --primary ->
+     --primary-dark gradient (§13's "run a real contrast check" rule). */
+  color: #fff;
+  max-width: 60ch;
+}
+
+.overview-hero__actions {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-top: var(--space-2);
+}
+
+.overview-hero__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.65rem 1.2rem;
+  border-radius: var(--radius-full);
+  background: #fff;
+  color: var(--primary-dark);
+  font-weight: 700;
+  font-size: var(--font-size-sm);
+  text-decoration: none;
+  transition:
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.overview-hero__cta:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+@media (min-width: 640px) {
+  .overview-hero__title {
+    font-size: var(--font-size-2xl);
+  }
 }
 
 .meeting-item__participants {
